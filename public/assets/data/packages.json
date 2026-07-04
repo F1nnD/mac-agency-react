@@ -1,0 +1,58 @@
+{
+    "concept": {
+        "num": "01",
+        "name": "Gói Thiết Kế Concept",
+        "price": 350000,
+        "unit": "m²",
+        "description": "Thiết kế phối cảnh 2D/3D chuyên sâu F&B, định hình nhận diện không gian duy mỹ.",
+        "bgImg": "../assets/data/pic/ARCHI.jpg",
+        "features": [
+            "Khảo sát hiện trạng mặt bằng thực tế",
+            "Thiết kế mặt bằng bố trí công năng 2D",
+            "Dựng phối cảnh không gian 3D Lookbook",
+            "Chỉ định chất liệu hoàn thiện bề mặt"
+        ]
+    },
+    "build": {
+        "num": "02",
+        "name": "Gói Thi Công Trọn Gói",
+        "price": 3500000,
+        "unit": "m²",
+        "description": "Thi công trọn gói hoàn thiện phần thô và nội thất cứng, cam kết chuẩn chỉ công trường.",
+        "bgImg": "../assets/data/pic/SETUP.jpg",
+        "features": [
+            "Xây dựng phần thô phá dỡ cải tạo hạ tầng",
+            "Sản xuất lắp đặt nội thất cứng độc bản",
+            "Hệ thống trần vách sàn, sơn bả mỹ thuật",
+            "Đội ngũ kỹ sư giám sát chất lượng nghiêm ngặt"
+        ]
+    },
+    "combo": {
+        "num": "03",
+        "name": "Gói Combo Premium",
+        "price": 4200000,
+        "unit": "m²",
+        "description": "Thiết kế + Thi công + Tối ưu quầy bar vận hành và setup hệ thống quản lý dòng tiền nội bộ.",
+        "bgImg": "../assets/data/pic/MARKETING.jpg",
+        "features": [
+            "Bao gồm toàn bộ quyền lợi gói Concept & Build",
+            "Tối ưu hóa nhân trắc học quầy bar vận hành tốc độ",
+            "Setup hệ thống phần cứng quản lý dòng tiền",
+            "Hỗ trợ truyền thông định vị ngày khai trương"
+        ]
+    },
+    "landscape": {
+        "num": "04",
+        "name": "Cảnh Quan Nghệ Thuật",
+        "price": 800000,
+        "unit": "m²",
+        "description": "Quy hoạch sinh thái diện tích lớn, hồ cá Koi và thảm thực vật tích hợp (Gu Glamping/Garden).",
+        "bgImg": "../assets/data/pic/BRANDING.jpg",
+        "features": [
+            "Quy hoạch tổng thể mặt bằng sinh thái vườn",
+            "Thiết kế và thi công kết cấu hồ cá Koi tiêu chuẩn",
+            "Hệ thống lọc tuần hoàn và xử lý nước vi sinh",
+            "Phối kết thảm thực vật kiến trúc đa tầng"
+        ]
+    }
+}

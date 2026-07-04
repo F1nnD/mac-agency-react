@@ -1,0 +1,67 @@
+{
+  
+    "themonic": {
+      "name": "The Monic<br>Coffee",
+      "breadcrumb": "The Monic Coffee",
+      "type": "Design & Build",
+      "location": "Q. 5, TP. HCM",
+      "area": "180 m²",
+      "year": "2023",
+      "subtitle": "Kiến tạo làn sóng cà phê tối giản trong lòng đô thị di sản",
+      "desc1": "The Monic Coffee được MAC thực hiện trọn gói...",
+      "desc2": "Điểm nhấn cốt lõi nằm ở nghệ thuật phân lớp...",
+      "quote": "\"Nơi ranh giới giữa kiến trúc thô phẳng...\"",
+      "img1": "assets/pic/themonic.jpg",
+      "img2": "assets/pic/themonic2.jpg",
+      "img3": "assets/pic/themonic.jpg",
+      "img4": "assets/pic/themonic2.jpg"
+    },
+    "underhood": {
+      "name": "Underhood<br>Kafe",
+      "breadcrumb": "Underhood Kafe",
+      "type": "Architecture • Interior",
+      "location": "Q. Bình Thạnh, TP. HCM",
+      "area": "220 m²",
+      "year": "2024",
+      "subtitle": "Setup không gian nghệ thuật đương đại...",
+      "desc1": "Underhood Kafe là sự kết hợp táo bạo...",
+      "desc2": "Mặt tiền của công trình gây ấn tượng mạnh...",
+      "quote": "\"Sự kết nối tinh tế giữa kết cấu sắt thép...\"",
+      "img1": "assets/pic/Under.jpg",
+      "img2": "assets/pic/under2.jpg",
+      "img3": "assets/pic/Under.jpg",
+      "img4": "assets/pic/under2.jpg"
+    },
+    "pixxie": {
+      "name": "Pixxie Pool<br>Billiard",
+      "breadcrumb": "Pixxie Pool Billiard",
+      "type": "Entertainment Complex",
+      "location": "Q. Gò Vấp, TP. HCM",
+      "area": "450 m²",
+      "year": "2024",
+      "subtitle": "Thiết kế & Setup tổ hợp giải trí...",
+      "desc1": "Pixxie Pool Billiard định hình một chuẩn mực...",
+      "desc2": "Mặt bằng diện tích rộng lớn được MAC phân chia...",
+      "quote": "\"Khi tư duy thể thao kết hợp cùng ngôn ngữ...\"",
+      "img1": "assets/pic/picxelpool.jpg",
+      "img2": "assets/pic/pixelpool2.jpg",
+      "img3": "assets/pic/picxelpool.jpg",
+      "img4": "assets/pic/pixelpool2.jpg"
+    },
+    "coco": {
+      "name": "Coco Cao<br>Glamping",
+      "breadcrumb": "Coco Cao Glamping",
+      "type": "Landscape • Architecture",
+      "location": "TP. Thủ Đức, TP. HCM",
+      "area": "1200 m²",
+      "year": "2024",
+      "subtitle": "Kiến tạo tổ hợp cắm trại sinh thái...",
+      "desc1": "Coco Cao Glamping là một trong những dự án...",
+      "desc2": "Bản quy hoạch được phân chia công năng...",
+      "quote": "\"Khi ranh giới giữa kiến trúc độc bản...\"",
+      "img1": "assets/pic/coco.jpg",
+      "img2": "assets/pic/coco2.jpg",
+      "img3": "assets/pic/coco.jpg",
+      "img4": "assets/pic/coco2.jpg"
+    } 
+}
