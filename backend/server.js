@@ -224,7 +224,7 @@ app.post('/api/ai-consult', async (req, res) => {
     }
 
     // --- TRƯỜNG HỢP 2: CHAT TỰ DO MỌI NGÔN NGỮ QUA GEMINI REST API ---
-    const apiKey = process.env.GEMINI_API_KEY || 'AQ.Ab8RN6KAXnmZ1hvUkjxVrIe_6y68Qh72F0IpiXOUasYXD8SpMw';
+    const apiKey = process.env.GEMINI_API_KEY || '';
     let aiParsedData = null;
 
     if (apiKey) {
