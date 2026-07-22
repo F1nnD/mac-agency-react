@@ -13,6 +13,9 @@ export default function Packages() {
   // 1. THUẬT TOÁN ĐỒNG BỘ: ƯU TIÊN NẠP DỮ LIỆU TỪ BỘ NHỚ ĐỆM LOCALSTORAGE
   // =========================================================================
   useEffect(() => {
+    // ⚡ GIẬT MÀN HÌNH LÊN ĐẦU TRANG LẬP TỨC KHI VỪA VÀO ROUTE
+    window.scrollTo(0, 0);
+
     async function loadStrategicPackages() {
       try {
         // Kiểm tra ngăn tủ lưu trữ cứng được đồng bộ từ Admin Dashboard trước
