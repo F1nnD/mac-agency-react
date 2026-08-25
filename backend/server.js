@@ -8,7 +8,6 @@ const connectDB = require('./src/config/db');
 // Import các Models
 const Project = require('./src/models/Project');
 const Package = require('./src/models/Package');
-module.exports = app;
 // =========================================================================
 // 📁 MODEL DRAFT (RÀNG BUỘC DIỆN TÍCH & HIỆN TRẠNG)
 // =========================================================================

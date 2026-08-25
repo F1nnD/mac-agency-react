@@ -2,17 +2,15 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import gsap from 'gsap';
 
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+
 export default function Dashboard() {
   const navigate = useNavigate();
 
-  // =========================================================================
-  // 1. QUẢN LÝ TRẠNG THÁI (STATES) TẬP TRUNG CORE WEB MANAGEMENT
-  // =========================================================================
   const [activeTab, setActiveTab] = useState('projects-tab'); 
   const [globalProjects, setGlobalProjects] = useState({});
   const [globalPackages, setGlobalPackages] = useState({});
   
-  // 📐 STATES QUẢN LÝ DRAFT LAYOUT (BỔ SUNG THÊM CÁC TRƯỜNG RÀNG BUỘC)
   const [globalDrafts, setGlobalDrafts] = useState([]);
   const [dId, setDId] = useState('');
   const [draftFormTitle, setDraftFormTitle] = useState('⚙️ Chọn một mẫu Draft hoặc bấm nút Thêm mới');
@@ -21,12 +19,10 @@ export default function Dashboard() {
   const [dPrice, setDPrice] = useState(350000);
   const [dImage, setDImage] = useState(''); 
   
-  // 🛠️ BỔ SUNG STATES ĐIỀU KIỆN RÀNG BUỘC
   const [dMinArea, setDMinArea] = useState(50);
   const [dMaxArea, setDMaxArea] = useState(150);
   const [dSiteStatus, setDSiteStatus] = useState('all');
 
-  // States quản lý Form Biên Tập Dự Án Real-time
   const [pId, setPId] = useState('');
   const [formTitle, setFormTitle] = useState('⚙ Chọn một dự án ở trên hoặc bấm nút Thêm mới');
   const [pName, setPName] = useState(''); 
@@ -36,14 +32,12 @@ export default function Dashboard() {
   const [pArea, setPArea] = useState(''); 
   const [pYear, setPYear] = useState(''); 
   
-  // States bối cảnh không gian chi tiết
   const [pSubtitle, setPSubtitle] = useState('');
   const [pQuote, setPQuote] = useState('');
   const [pDesc1, setPDesc1] = useState('');
   const [pDesc2, setPDesc2] = useState('');
   const [pProjectDesc, setPProjectDesc] = useState(''); 
   
-  // Bộ 4 đường dẫn ảnh của dự án
   const [pImg1, setPImg1] = useState(''); 
   const [pImg2, setPImg2] = useState(''); 
   const [pImg3, setPImg3] = useState(''); 
@@ -51,7 +45,7 @@ export default function Dashboard() {
 
   const fetchProjectsFromDB = async () => {
     try {
-      const resProj = await fetch('http://localhost:5000/api/projects');
+      const resProj = await fetch(`${API_BASE_URL}/api/projects`);
       if (resProj.ok) {
         const projData = await resProj.json();
         if (projData && (Array.isArray(projData) ? projData.length > 0 : Object.keys(projData).length > 0)) {
@@ -70,13 +64,13 @@ export default function Dashboard() {
       }
       throw new Error("Dữ liệu Database trống");
     } catch (error) {
-      console.warn("⚠️ API Database chưa thông suốt...");
+      console.warn("API Database chưa thông suốt...");
     }
   };
 
   const fetchDraftsFromDB = async () => {
     try {
-      const res = await fetch('http://localhost:5000/api/drafts');
+      const res = await fetch(`${API_BASE_URL}/api/drafts`);
       if (res.ok) {
         const data = await res.json();
         setGlobalDrafts(data);
@@ -93,9 +87,10 @@ export default function Dashboard() {
         await fetchDraftsFromDB();
         const cachedPack = localStorage.getItem('mac_packages_cache');
         let packData = {};
-        if (cachedPack) { packData = JSON.parse(cachedPack); } 
-        else {
-          const resPack = await fetch('http://localhost:5000/api/packages');
+        if (cachedPack) { 
+          packData = JSON.parse(cachedPack); 
+        } else {
+          const resPack = await fetch(`${API_BASE_URL}/api/packages`);
           packData = await resPack.json();
           localStorage.setItem('mac_packages_cache', JSON.stringify(packData));
         }
@@ -108,9 +103,6 @@ export default function Dashboard() {
     gsap.fromTo(".admin-panel-reveal", { opacity: 0, y: 15 }, { duration: 0.6, opacity: 1, y: 0, ease: "power2.out" });
   }, []);
 
-  // =========================================================================
-  // 2. THUẬT TOÁN ĐIỀU KHIỂN LOGIC FORM DỰ ÁN
-  // =========================================================================
   const fillProjectToForm = (proj) => {
     const targetId = proj._id || proj.id || '';
     setPId(targetId);
@@ -152,30 +144,44 @@ export default function Dashboard() {
     e.preventDefault();
     if (!pName || !pBreadcrumb) { alert("⚠️ Vui lòng điền tối thiểu Tên dự án và Breadcrumb!"); return; }
     const isEdit = pId && pId.trim().length > 0;
-    const url = isEdit ? `http://localhost:5000/api/projects/${pId}` : 'http://localhost:5000/api/projects';
+    const url = isEdit ? `${API_BASE_URL}/api/projects/${pId}` : `${API_BASE_URL}/api/projects`;
     const method = isEdit ? 'PUT' : 'POST';
     const payload = { name: pName, breadcrumb: pBreadcrumb.toLowerCase().trim().replace(/\s+/g, '-'), type: pType, location: pLocation, area: pArea, year: pYear, subtitle: pSubtitle, quote: pQuote, desc1: pDesc1, desc2: pDesc2, projectDesc: pProjectDesc, img1: pImg1 || 'assets/pic/Under.jpg', img2: pImg2, img3: pImg3, img4: pImg4 };
     try {
       const res = await fetch(url, { method: method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-      if (res.ok) { alert(isEdit ? "✅ Cập nhật thông tin dự án thành công!" : "✅ Đã tạo mới dự án thành công xuống Database!"); clearProjectForm(); localStorage.removeItem('mac_portfolio_cache'); await fetchProjectsFromDB(); }
-    } catch (err) { alert("❌ Lỗi kết nối tới Backend!"); }
+      if (res.ok) { 
+        alert(isEdit ? "✅ Cập nhật thông tin dự án thành công!" : "✅ Đã tạo mới dự án thành công xuống Database!"); 
+        clearProjectForm(); 
+        localStorage.removeItem('mac_portfolio_cache'); 
+        await fetchProjectsFromDB(); 
+      }
+    } catch (err) { 
+      alert("❌ Lỗi kết nối tới Backend!"); 
+    }
   };
 
   const handleDeleteProject = async (id, name) => {
     if (!id) return;
     if (window.confirm(`⚠️ Bạn có chắc chắn muốn XÓA VĨNH VIỄN dự án "${name}" không?`)) {
       try {
-        const res = await fetch(`http://localhost:5000/api/projects/${id}`, { method: 'DELETE' });
-        if (res.ok) { alert(`🗑️ Đã xóa hoàn toàn dự án "${name}"!`); await fetchProjectsFromDB(); if (pId === id) clearProjectForm(); }
-      } catch (err) { alert("❌ Lỗi kết nối mạng!"); }
+        const res = await fetch(`${API_BASE_URL}/api/projects/${id}`, { method: 'DELETE' });
+        if (res.ok) { 
+          alert(`🗑️ Đã xóa hoàn toàn dự án "${name}"!`); 
+          await fetchProjectsFromDB(); 
+          if (pId === id) clearProjectForm(); 
+        }
+      } catch (err) { 
+        alert("❌ Lỗi kết nối mạng!"); 
+      }
     }
   };
 
-  const savePackagesData = (e) => { e.preventDefault(); localStorage.setItem('mac_packages_cache', JSON.stringify(globalPackages)); alert("Bảng định biên đơn giá đã được đồng bộ!"); };
+  const savePackagesData = (e) => { 
+    e.preventDefault(); 
+    localStorage.setItem('mac_packages_cache', JSON.stringify(globalPackages)); 
+    alert("Bảng định biên đơn giá đã được đồng bộ!"); 
+  };
 
-  // =========================================================================
-  // 📐 3. THUẬT TOÁN ĐIỀU KHIỂN LOGIC FORM DRAFT LAYOUT (BỔ SUNG RÀNG BUỘC)
-  // =========================================================================
   const fillDraftToForm = (draft) => {
     setDId(draft._id);
     setDraftFormTitle(`✍️ Đang sửa đổi cấu trúc Draft Layout: ${draft.name}`);
@@ -183,8 +189,6 @@ export default function Dashboard() {
     setDName(draft.name);
     setDPrice(draft.basePricePerM2);
     setDImage(draft.demoImage);
-    
-    // Đổ dữ liệu ràng buộc cũ vào Form
     setDMinArea(draft.minArea || 0);
     setDMaxArea(draft.maxArea || 5000);
     setDSiteStatus(draft.siteStatus || 'all');
@@ -209,7 +213,7 @@ export default function Dashboard() {
       return; 
     }
     const isEdit = dId && dId.trim().length > 0;
-    const url = isEdit ? `http://localhost:5000/api/drafts/${dId}` : 'http://localhost:5000/api/drafts';
+    const url = isEdit ? `${API_BASE_URL}/api/drafts/${dId}` : `${API_BASE_URL}/api/drafts`;
     const method = isEdit ? 'PUT' : 'POST';
     
     const payload = { 
@@ -241,9 +245,15 @@ export default function Dashboard() {
   const handleDeleteDraft = async (id, name) => {
     if (window.confirm(`🗑️ Bạn có chắc chắn muốn XÓA vĩnh viễn mẫu Draft Layout "${name}" không?`)) {
       try {
-        const res = await fetch(`http://localhost:5000/api/drafts/${id}`, { method: 'DELETE' });
-        if (res.ok) { alert("🏁 Đã xóa Draft khỏi hệ thống hiển thị trang chủ!"); await fetchDraftsFromDB(); if (dId === id) clearDraftForm(); }
-      } catch (err) { alert("❌ Lỗi kết nối mạng!"); }
+        const res = await fetch(`${API_BASE_URL}/api/drafts/${id}`, { method: 'DELETE' });
+        if (res.ok) { 
+          alert("🏁 Đã xóa Draft khỏi hệ thống hiển thị trang chủ!"); 
+          await fetchDraftsFromDB(); 
+          if (dId === id) clearDraftForm(); 
+        }
+      } catch (err) { 
+        alert("❌ Lỗi kết nối mạng!"); 
+      }
     }
   };
 
@@ -254,7 +264,6 @@ export default function Dashboard() {
         @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
       `}</style>
 
-      {/* SIDEBAR ĐIỀU HƯỚNG TẬP TRUNG CORE WEB */}
       <aside className="w-full md:w-64 bg-black border-b md:border-b-0 md:border-r border-white/5 flex flex-col justify-between p-6 select-none shrink-0 text-left">
         <div className="space-y-8">
           <div className="flex flex-col border-b border-white/5 pb-5">
@@ -282,10 +291,7 @@ export default function Dashboard() {
         </div>
       </aside>
 
-      {/* KHUNG NỘI DUNG CHÍNH */}
       <main className="flex-1 bg-[#0b0b0b] p-8 md:p-12 overflow-y-auto h-screen text-left">
-        
-        {/* TAB 1: BIÊN TẬP DANH MỤC DỰ ÁN */}
         {activeTab === 'projects-tab' && (
           <div className="tab-content-anim space-y-8 w-full" id="project-form-anchor">
             <div className="flex items-center justify-between border-b border-white/5 pb-5">
@@ -298,7 +304,7 @@ export default function Dashboard() {
                 return (
                   <div key={proj._id || idx} className="bg-zinc-900/20 border border-white/5 p-6 rounded-2xl flex items-center justify-between gap-4 hover:border-white/10 transition-all">
                     <div className="flex items-center gap-4 overflow-hidden">
-                      <div className="w-16 h-16 rounded-xl bg-neutral-800 overflow-hidden shrink-0 border border-white/5"><img src={proj.img1 ? (proj.img1.startsWith('http') ? proj.img1 : '/' + proj.img1.replace('../', '')) : "https://placehold.co/150"} alt="" className="w-full h-full object-cover block" /></div>
+                      <div className="w-16 h-16 rounded-xl bg-neutral-800 overflow-hidden shrink-0 border border-white/5"><img src={proj.img1 ? (proj.img1.startsWith('http') || proj.img1.startsWith('data:') ? proj.img1 : '/' + proj.img1.replace('../', '')) : "https://placehold.co/150"} alt="" className="w-full h-full object-cover block" /></div>
                       <div><h3 className="text-sm font-bold text-white uppercase truncate" dangerouslySetInnerHTML={{ __html: proj.name }}></h3><p className="text-[10px] text-gray-500 mt-0.5 font-mono">{proj.area} • {proj.year}</p></div>
                     </div>
                     <div className="flex gap-2"><button type="button" onClick={() => fillProjectToForm(proj)} className="border border-white/10 bg-black/20 text-[10px] font-bold uppercase tracking-widest px-4 py-2 rounded-lg hover:bg-white hover:text-black transition-all cursor-pointer outline-none">Sửa</button><button type="button" onClick={() => handleDeleteProject(proj._id, proj.name)} className="border border-red-900/40 bg-red-950/20 text-[10px] font-bold uppercase tracking-widest text-red-400 px-4 py-2 rounded-lg hover:bg-red-900 hover:text-white transition-all cursor-pointer outline-none">Xóa</button></div>
@@ -328,7 +334,6 @@ export default function Dashboard() {
                 <div className="space-y-2"><label className="text-[10px] uppercase tracking-wider text-gray-400 font-bold">Desc2</label><textarea rows="3" value={pDesc2} onChange={(e) => setPDesc2(e.target.value)} className="w-full bg-black/40 border border-white/10 rounded-xl p-4 text-xs text-white focus:outline-none" /></div>
               </div>
 
-              {/* KHU VỰC CẤU TRÚC ẢNH DỰ ÁN */}
               <div className="pt-4 border-t border-white/5 space-y-6">
                 <h3 className="text-[11px] font-bold uppercase tracking-widest text-emerald-400 font-mono">🖼️ Cấu trúc hệ thống hình ảnh bối cảnh (Chọn file từ máy)</h3>
                 
@@ -390,7 +395,6 @@ export default function Dashboard() {
           </div>
         )}
 
-        {/* TAB 2: BIÊN TẬP VÀ THÊM MỚI DRAFT LAYOUT (BỔ SUNG KHUNG RÀNG BUỘC DIỆN TÍCH & HIỆN TRẠNG) */}
         {activeTab === 'drafts-tab' && (
           <div className="tab-content-anim space-y-8 w-full">
             <div className="flex items-center justify-between border-b border-white/5 pb-5">
@@ -459,7 +463,6 @@ export default function Dashboard() {
                 </div>
               </div>
 
-              {/* 🛠️ BỔ SUNG: KHU VỰC THIẾT LẬP RÀNG BUỘC DIỆN TÍCH VÀ HIỆN TRẠNG ĐẤT */}
               <div className="pt-4 border-t border-white/5 space-y-4">
                 <h3 className="text-[11px] font-bold uppercase tracking-widest text-amber-400 font-mono">⚡ Cấu hình điều kiện lọc gợi ý ở Trang Chủ</h3>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -490,7 +493,6 @@ export default function Dashboard() {
           </div>
         )}
 
-        {/* TAB 3: SỬA BẢNG GIÁ ĐỊNH BIÊN */}
         {activeTab === 'packages-tab' && (
           <div className="tab-content-anim space-y-8 w-full">
             <div><span className="text-[10px] tracking-[0.3em] text-white/30 uppercase font-semibold">Pricing Strategy</span><h1 className="text-2xl font-light text-white uppercase mt-1">Thay đổi giá các gói thiết kế dự án</h1></div>

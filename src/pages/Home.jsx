@@ -3,22 +3,20 @@ import { useNavigate } from 'react-router-dom';
 import gsap from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import { ScrollToPlugin } from 'gsap/ScrollToPlugin';
+import Header from '../components/Header';
 
 gsap.registerPlugin(ScrollTrigger, ScrollToPlugin);
+
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 
 export default function Home() {
   const navigate = useNavigate();
 
-  // =========================================================================
-  // 1. QUẢN LÝ TRẠNG THÁI (STATES) CHO SLIDE NỀN, PORTFOLIO & 3 CHẾ ĐỘ TÍNH GIÁ
-  // =========================================================================
   const [homeCurrentIdx, setHomeCurrentIdx] = useState(0);
   const [portfolioData, setPortfolioData] = useState([]); 
   
-  // Quản lý Chế độ Tab: 'draft-filter', 'quick-calc', 'ai-chat'
   const [calcMode, setCalcMode] = useState('draft-filter');
 
-  // States dành cho Tab 2 (Tính giá nhanh)
   const [priceList, setPriceList] = useState({
     concept: { name: "Gói Thiết Kế Concept", price: 350000 },
     build: { name: "Gói Thi Công Trọn Gói", price: 3500000 },
@@ -27,13 +25,11 @@ export default function Home() {
   });
   const [selectedPackage, setSelectedPackage] = useState("concept");
 
-  // States dành cho Tab 1 (Lọc Draft Layout)
   const [area, setArea] = useState(100);
   const [siteFilter, setSiteFilter] = useState('all');
   const [draftList, setDraftList] = useState([]);
   const [selectedDraft, setSelectedDraft] = useState(null);
 
-  // 🛠️ STATES TAB 3: AI STUDIO & CHAT ĐA NGÔN NGỮ
   const [aiSpaceType, setAiSpaceType] = useState('Quán Kafe & Trà Sữa');
   const [aiStyle, setAiStyle] = useState('Industrial');
   const [aiArea, setAiArea] = useState(120);
@@ -41,9 +37,6 @@ export default function Home() {
   const [aiLoading, setAiLoading] = useState(false);
   const [aiResult, setAiResult] = useState(null);
 
-  // =========================================================================
-  // 2. VÒNG ĐỜI COMPONENT (EFFECTS)
-  // =========================================================================
   useEffect(() => {
     const interval = setInterval(() => {
       setHomeCurrentIdx((prev) => (prev + 1) % 3);
@@ -65,7 +58,7 @@ export default function Home() {
 
     async function fetchPortfolio() {
       try {
-        const response = await fetch('http://localhost:5000/api/projects');
+        const response = await fetch(`${API_BASE_URL}/api/projects`);
         if (response.ok) {
           const database = await response.json();
           setPortfolioData(database);
@@ -77,7 +70,7 @@ export default function Home() {
 
     async function fetchPackages() {
       try {
-        const response = await fetch('http://localhost:5000/api/packages');
+        const response = await fetch(`${API_BASE_URL}/api/packages`);
         if (response.ok) {
           const data = await response.json();
           const updatedPriceList = { ...priceList };
@@ -99,7 +92,7 @@ export default function Home() {
 
     async function fetchDraftLayouts() {
       try {
-        const response = await fetch('http://localhost:5000/api/drafts');
+        const response = await fetch(`${API_BASE_URL}/api/drafts`);
         if (response.ok) {
           const data = await response.json();
           setDraftList(data);
@@ -140,7 +133,6 @@ export default function Home() {
 
   const formatVND = (amount) => amount ? amount.toLocaleString('vi-VN') + 'đ' : '0đ';
 
-  // THUẬT TOÁN LỌC DRAFT TAB 1
   const filteredDrafts = draftList.filter(draft => {
     const min = draft.minArea || 0;
     const max = draft.maxArea || 5000;
@@ -159,12 +151,11 @@ export default function Home() {
     }
   }, [area, siteFilter, draftList]);
 
-  // HÀM 1: TẠO PHỐI CẢNH TỪ FORM CHỌN TĨNH
   const handleGenerateFromForm = async (e) => {
     e.preventDefault();
     setAiLoading(true);
     try {
-      const res = await fetch('http://localhost:5000/api/ai-consult', {
+      const res = await fetch(`${API_BASE_URL}/api/ai-consult`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ style: aiStyle, area: aiArea, spaceType: aiSpaceType })
@@ -180,7 +171,6 @@ export default function Home() {
     }
   };
 
-  // HÀM 2: CHAT TRỰC TIẾP ĐA NGÔN NGỮ VỚI GEMINI AI
   const handleSendChat = async (e) => {
     e.preventDefault();
     if (!chatInput.trim() || aiLoading) return;
@@ -190,7 +180,7 @@ export default function Home() {
     setAiLoading(true);
 
     try {
-      const res = await fetch('http://localhost:5000/api/ai-consult', {
+      const res = await fetch(`${API_BASE_URL}/api/ai-consult`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userMessage: msg })
@@ -206,7 +196,6 @@ export default function Home() {
     }
   };
 
-  // PHÉP TÍNH TAB 1 & TAB 2
   const draftUnitPrice = selectedDraft ? selectedDraft.basePricePerM2 : 0;
   const draftBaseCost = area * draftUnitPrice;
   const draftBoqCost = draftBaseCost * 0.05;
@@ -219,34 +208,10 @@ export default function Home() {
 
   return (
     <div className="w-full text-gray-300 antialiased overflow-x-hidden font-sans bg-[#0b0b0b]">
-
-      {/* HEADER BAR */}
-      <header className="fixed top-0 left-0 right-0 z-50 bg-[#0b0b0b] border-b border-white/5 px-6 py-5 md:px-16 flex items-center justify-between w-full">
-        <div className="flex items-center select-none">
-          <button 
-            onClick={() => navigate('/')} 
-            className="text-white/40 hover:text-white mr-3 md:mr-4 transform hover:-translate-x-1 transition-all duration-300 ease-out flex items-center justify-center bg-transparent border-none outline-none cursor-pointer"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="2.5" stroke="currentColor" className="w-4 h-4 md:w-5 md:h-5">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" />
-            </svg>
-          </button>
-          <div onClick={(e) => handleSmoothScroll(e, '#top')} className="group flex items-center cursor-pointer">
-            <img src="/assets/pic/logo3.png" alt="MAC Logo" className="h-9 w-auto object-contain transition-opacity duration-300 group-hover:opacity-80" />
-          </div>
-        </div>
-        <nav className="hidden md:flex items-center gap-10 text-xs tracking-widest uppercase font-medium text-gray-400">
-          <a href="#about" onClick={(e) => handleSmoothScroll(e, '#about')} className="hover:text-white transition-colors">Giới Thiệu</a>
-          <a href="#services" onClick={(e) => handleSmoothScroll(e, '#services')} className="hover:text-white transition-colors">Dịch Vụ</a>
-          <a href="#portfolio" onClick={(e) => handleSmoothScroll(e, '#portfolio')} className="hover:text-white transition-colors">Dự Án</a>
-          <a href="#process" onClick={(e) => handleSmoothScroll(e, '#process')} className="hover:text-white transition-colors">Quy Trình</a>
-          <a href="#calculator" onClick={(e) => handleSmoothScroll(e, '#calculator')} className="hover:text-white transition-colors">Bộ Tính Giá</a>
-        </nav>
-      </header>
+      <Header showBackBtn={true} />
 
       <div id="top"></div>
 
-      {/* HERO CINEMATIC SLIDESHOW */}
       <section className="relative h-screen w-full flex items-center justify-center overflow-hidden bg-[#0b0b0b]">
         <div className="absolute inset-0 z-0 w-full h-full">
           <div className="absolute inset-0 bg-black/50 z-10 pointer-events-none"></div>
@@ -299,7 +264,6 @@ export default function Home() {
         </div>
       </section>
 
-      {/* SECTION ABOUT */}
       <section id="about" className="fade-in-section py-28 px-6 md:px-16 w-full border-t border-white/5 grid grid-cols-1 md:grid-cols-3 gap-16 scroll-mt-20 text-left">
         <div className="flex flex-col justify-between h-full space-y-6">
           <div className="space-y-2">
@@ -329,7 +293,6 @@ export default function Home() {
         </div>
       </section>
 
-      {/* SECTION SERVICES */}
       <section id="services" className="py-24 bg-[#0b0b0b] w-full border-y border-white/5 scroll-mt-20">
         <div className="px-6 md:px-16 mb-12 text-left select-none">
           <span className="text-xs tracking-[0.3em] text-white/40 uppercase block mb-1">Our Expertise</span>
@@ -375,7 +338,6 @@ export default function Home() {
         </div>
       </section>
 
-      {/* SECTION PORTFOLIO */}
       <section id="portfolio" className="fade-in-section py-24 px-6 md:px-16 w-full scroll-mt-20 text-left">
         <div className="flex items-end justify-between border-b border-white/5 mb-12 pb-5">
           <div>
@@ -392,7 +354,7 @@ export default function Home() {
             
             const checkImg = (p) => {
               if (!p) return '';
-              if (p.startsWith('http://') || p.startsWith('https://') || p.startsWith('/')) return p;
+              if (p.startsWith('http://') || p.startsWith('https://') || p.startsWith('data:') || p.startsWith('/')) return p;
               return '/' + p.replace('../assets/pic/', 'assets/pic/').replace('../pic/', 'assets/pic/');
             };
 
@@ -427,7 +389,6 @@ export default function Home() {
         </div>
       </section>
 
-      {/* 🛠️ BỔ SUNG LẠI SECTION QUY TRÌNH DỰ ÁN (#process) HOÀN CHỈNH */}
       <section id="process" className="fade-in-section py-24 px-6 md:px-16 w-full border-t border-white/5 scroll-mt-20 text-left bg-[#080808]">
         <div className="max-w-7xl mx-auto space-y-12">
           <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 border-b border-white/5 pb-6">
@@ -476,9 +437,6 @@ export default function Home() {
         </div>
       </section>
 
-      {/* ========================================================================= */}
-      {/* 🚀 SECTION ESTIMATOR CALCULATOR - TÍNH NĂNG 3 CHẾ ĐỘ PHÂN LUỒNG THÔNG MINH */}
-      {/* ========================================================================= */}
       <section id="calculator" className="bg-[#050505] py-24 px-6 md:px-16 border-t border-white/5 select-none scroll-mt-20 text-left w-full">
         <div className="max-w-7xl mx-auto space-y-10">
           
@@ -488,7 +446,6 @@ export default function Home() {
               <h2 className="text-3xl md:text-4xl font-bold tracking-tight text-white uppercase">Bộ Tính Giá Dự Toán Công Trình</h2>
             </div>
 
-            {/* THANH CHUYỂN ĐỔI 3 TAB LỰA CHỌN PHONG CÁCH HOLOGRAM DARK MODE */}
             <div className="inline-flex p-1.5 bg-zinc-900/80 border border-white/10 rounded-2xl backdrop-blur-md shrink-0">
               <button
                 onClick={() => setCalcMode('draft-filter')}
@@ -511,7 +468,6 @@ export default function Home() {
             </div>
           </div>
 
-          {/* TAB 1: GỢI Ý DRAFT THEO RÀNG BUỘC DIỆN TÍCH M2 VÀ HIỆN TRẠNG */}
           {calcMode === 'draft-filter' && (
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-stretch animate-fadeIn">
               <div className="lg:col-span-7 space-y-8 bg-zinc-900/20 border border-white/5 p-8 rounded-2xl backdrop-blur-sm flex flex-col justify-between">
@@ -583,17 +539,15 @@ export default function Home() {
                 </div>
               </div>
 
-              {/* BẢNG HÓA ĐƠN VÀ SƠ ĐỒ MẶT BẰNG PHÍA BÊN PHẢI (TAB 1) */}
               <div className="lg:col-span-5 bg-white text-black p-6 md:p-8 rounded-2xl shadow-2xl flex flex-col justify-between relative overflow-hidden space-y-6">
                 <div className="space-y-4">
                   <div className="text-center pb-3 border-b border-dashed border-neutral-300">
                     <img src="/assets/pic/logo3.png" alt="MAC Logo" className="w-24 h-auto object-contain invert mx-auto block" />
                   </div>
 
-                  {/* Sơ đồ mặt bằng thu nhỏ */}
                   <div className="w-full aspect-[16/10] bg-neutral-100 rounded-xl border border-neutral-200 overflow-hidden relative shadow-inner">
                     {selectedDraft ? (
-                      <img src={selectedDraft.demoImage.startsWith('http') ? selectedDraft.demoImage : '/' + selectedDraft.demoImage} alt={selectedDraft.name} className="w-full h-full object-cover block" />
+                      <img src={selectedDraft.demoImage.startsWith('http') || selectedDraft.demoImage.startsWith('data:') ? selectedDraft.demoImage : '/' + selectedDraft.demoImage} alt={selectedDraft.name} className="w-full h-full object-cover block" />
                     ) : (
                       <div className="w-full h-full flex items-center justify-center text-xs text-neutral-400 italic">Vui lòng chọn một mẫu Draft...</div>
                     )}
@@ -648,7 +602,6 @@ export default function Home() {
             </div>
           )}
 
-          {/* TAB 2: TÍNH GIÁ NHANH TRUYỀN THỐNG CỐ ĐỊNH */}
           {calcMode === 'quick-calc' && (
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-stretch animate-fadeIn">
               <div className="lg:col-span-7 space-y-8 bg-zinc-900/20 border border-white/5 p-8 py-12 rounded-2xl backdrop-blur-sm flex flex-col justify-between">
@@ -740,7 +693,6 @@ export default function Home() {
                 </div>
               </div>
 
-              {/* HÓA ĐƠN CHI TIẾT CỦA TAB 2 */}
               <div className="lg:col-span-5 bg-white text-black p-6 md:p-8 rounded-2xl shadow-2xl flex flex-col justify-between relative overflow-hidden space-y-6">
                 <div className="space-y-5">
                   <div className="text-center pb-4 border-b border-dashed border-neutral-300 flex flex-col items-center justify-center space-y-2">
@@ -800,23 +752,17 @@ export default function Home() {
             </div>
           )}
 
-          {/* ═══════════════════════════════════════════════════════════════════════ */}
-          {/* 🤖 TAB 3: AI VISUAL STUDIO & CHAT (ĐA NGÔN NGỮ GEMINI ĐÍNH KÈM FORM) */}
-          {/* ═══════════════════════════════════════════════════════════════════════ */}
           {calcMode === 'ai-chat' && (
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-stretch animate-fadeIn">
               
-              {/* CỘT TRÁI: FORM CHỌN TĨNH ĐỦ 3 MỤC + KHUNG CHAT CÂU THOẠI ĐA NGÔN NGỮ */}
               <div className="lg:col-span-6 space-y-6 bg-zinc-900/30 border border-emerald-500/20 p-6 md:p-8 rounded-2xl backdrop-blur-sm flex flex-col justify-between">
                 
-                {/* 1. KHUNG FORM CHỌN TĨNH */}
                 <form onSubmit={handleGenerateFromForm} className="space-y-4 border-b border-emerald-500/20 pb-6">
                   <div className="space-y-1">
                     <span className="text-[10px] tracking-[0.3em] text-emerald-400 font-mono uppercase block">Cách 1: Tùy Chọn Nhanh Cố Định</span>
                     <h3 className="text-base font-bold text-white uppercase">Tạo Phối Cảnh & Bóc Giá AI</h3>
                   </div>
 
-                  {/* Hàng 1: Loại hình công trình */}
                   <div className="space-y-1.5">
                     <label className="text-[11px] tracking-wider uppercase font-semibold text-gray-400 block">1. Loại hình công trình mong muốn</label>
                     <select 
@@ -832,7 +778,6 @@ export default function Home() {
                     </select>
                   </div>
 
-                  {/* Hàng 2: Phong cách & Diện tích */}
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="space-y-1.5">
                       <label className="text-[11px] tracking-wider uppercase font-semibold text-gray-400 block">2. Phong cách kiến trúc</label>
@@ -871,7 +816,6 @@ export default function Home() {
                   </button>
                 </form>
 
-                {/* 2. KHUNG CHAT TRÒ CHUYỆN CỤ THỂ BẰNG BẤT KỲ NGÔN NGỮ NHƯ GEMINI */}
                 <div className="space-y-3 pt-2">
                   <span className="text-[10px] tracking-[0.3em] text-emerald-400 font-mono uppercase block">Cách 2: Trò Chuyện Trực Tiếp Cùng KTS AI (Hiểu Mọi Ngôn Ngữ)</span>
                   <form onSubmit={handleSendChat} className="flex gap-2">
@@ -894,7 +838,6 @@ export default function Home() {
 
               </div>
 
-              {/* CỘT PHẢI: HIỂN THỊ HÌNH RENDER FLUX 8K VÀ HÓA ĐƠN DỰ TOÁN REALTIME */}
               <div className="lg:col-span-6 bg-white text-black p-6 md:p-8 rounded-2xl shadow-2xl flex flex-col justify-between relative overflow-hidden space-y-6">
                 
                 {aiLoading ? (
@@ -909,7 +852,6 @@ export default function Home() {
                       <h4 className="text-sm font-bold uppercase">{aiResult.spaceType} • {aiResult.style}</h4>
                     </div>
 
-                    {/* Nếu có Dữ liệu Kiến trúc -> Hiện hình Render FLUX 8K */}
                     {!aiResult.isPureChat && aiResult.aiImageUrl && (
                       <div className="w-full aspect-video rounded-xl border border-neutral-200 overflow-hidden shadow-inner relative group bg-black">
                         <img src={aiResult.aiImageUrl} alt="AI Visual Result" className="w-full h-full object-cover block" />
@@ -917,12 +859,10 @@ export default function Home() {
                       </div>
                     )}
 
-                    {/* Câu trả lời tư vấn từ Gemini */}
                     <p className="text-[11px] text-neutral-700 font-light leading-relaxed bg-neutral-50 p-3 rounded-lg border border-neutral-200">
                       "{aiResult.replyText}"
                     </p>
 
-                    {/* Nếu không phải chat thuần thì hiện Hóa đơn BOQ */}
                     {!aiResult.isPureChat && (
                       <>
                         <div className="space-y-2 text-xs border-b border-dashed border-neutral-300 pb-3">
@@ -966,7 +906,6 @@ export default function Home() {
                   </div>
                 )}
 
-                {/* NÚT TƯ VẤN ZALO */}
                 <div className="pt-3 border-t border-neutral-200">
                   <a
                     href="https://zalo.me/0375075975" 
@@ -986,7 +925,6 @@ export default function Home() {
         </div>
       </section>
 
-      {/* FOOTER SYSTEM */}
       <footer id="contact" className="bg-black py-20 px-6 md:px-16 border-t border-white/5 w-full text-left">
         <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-4 gap-12 text-sm text-gray-500 font-light leading-relaxed">
           

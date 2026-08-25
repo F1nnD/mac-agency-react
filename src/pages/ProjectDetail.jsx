@@ -3,7 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import gsap from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import { ScrollToPlugin } from 'gsap/ScrollToPlugin';
-
+import Header from '../components/Header';
 gsap.registerPlugin(ScrollTrigger, ScrollToPlugin);
 
 export default function ProjectDetail() {
@@ -32,7 +32,7 @@ export default function ProjectDetail() {
         }
         throw new Error("Không tìm thấy dự án trong DB, chuyển sang đọc file tĩnh dự phòng...");
       } catch (error) {
-        console.warn("⚠️ API Detail chưa thông suốt, đang đọc file JSON tĩnh dự phòng:", error);
+        console.warn("API Detail chưa thông suốt, đang đọc file JSON tĩnh dự phòng:", error);
         try {
           const resLocal = await fetch('/assets/data/projects.json');
           const database = await resLocal.json();
@@ -100,20 +100,7 @@ export default function ProjectDetail() {
   return (
     <div className="w-full min-h-screen bg-[#0b0b0b] text-gray-300 antialiased overflow-x-hidden font-sans">
 
-      {/* HEADER NAV TOP */}
-      <header className="fixed top-0 left-0 right-0 z-50 bg-[#0b0b0b] border-b border-white/5 px-6 py-5 md:px-16 flex items-center justify-between w-full">
-        <div onClick={() => navigate('/home')} className="flex flex-col cursor-pointer select-none group">
-          <span className="text-2xl font-bold tracking-widest text-white leading-none group-hover:text-neutral-400 transition-colors">MAC</span>
-          <span className="text-[9px] tracking-[0.2em] text-white/40 uppercase mt-1">More Artistic Concept</span>
-        </div>
-        <nav className="hidden md:flex items-center gap-10 text-xs tracking-widest uppercase font-medium text-gray-400">
-          <button onClick={() => navigate('/home#about')} className="hover:text-white transition-colors bg-transparent border-none cursor-pointer outline-none uppercase font-medium tracking-widest text-xs">Giới Thiệu</button>
-          <button onClick={() => navigate('/home#services')} className="hover:text-white transition-colors bg-transparent border-none cursor-pointer outline-none uppercase font-medium tracking-widest text-xs">Dịch Vụ</button>
-          <button onClick={() => navigate('/portfolio')} className="hover:text-white transition-colors text-white bg-transparent border-none cursor-pointer outline-none uppercase font-medium tracking-widest text-xs">Dự Án</button>
-          <button onClick={() => navigate('/home#process')} className="hover:text-white transition-colors bg-transparent border-none cursor-pointer outline-none uppercase font-medium tracking-widest text-xs">Quy Trình</button>
-          <button onClick={() => navigate('/home#calculator')} className="hover:text-white transition-colors bg-transparent border-none cursor-pointer outline-none uppercase font-medium tracking-widest text-xs">Bộ Tính Giá</button>
-        </nav>
-      </header>
+  <Header showBackBtn={true} />
 
       <div className="h-28"></div>
 

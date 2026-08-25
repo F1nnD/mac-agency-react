@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import gsap from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
-
+import Header from '../components/Header';
 gsap.registerPlugin(ScrollTrigger);
 
 export default function AboutDetail() {
@@ -69,27 +69,7 @@ export default function AboutDetail() {
   return (
     <div className="w-full min-h-screen bg-[#0b0b0b] text-gray-300 antialiased overflow-x-hidden font-sans">
       
-      {/* ========================================================================= */}
-      {/* HEADER NAV TOP */}
-      {/* ========================================================================= */}
-      <header className="fixed top-0 inset-x-0 z-50 bg-[#0b0b0b]/80 backdrop-blur-md border-b border-white/5 px-6 py-5 md:px-16 flex items-center justify-between w-full">
-        <button onClick={() => navigate('/home')} className="group flex items-center relative select-none cursor-pointer bg-transparent border-none outline-none text-left">
-          <div className="text-white/40 group-hover:text-white mr-3 md:mr-4 transform group-hover:-translate-x-1 transition-transform duration-300 ease-out flex items-center justify-center">
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="2.5" stroke="currentColor" className="w-4 h-4 md:w-5 md:h-5">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" />
-            </svg>
-          </div>
-          <img src="/assets/pic/logo2.png" alt="MAC Logo" className="h-9 w-auto object-contain transition-opacity duration-300 group-hover:opacity-80 block" />
-        </button>
-        
-        <nav className="hidden md:flex items-center gap-10 text-xs tracking-widest uppercase font-medium text-gray-400">
-          <button onClick={() => navigate('/home#about')} className="text-white transition-colors bg-transparent border-none cursor-pointer outline-none uppercase font-medium tracking-widest text-xs">Giới Thiệu</button>
-          <button onClick={() => navigate('/home#services')} className="hover:text-white transition-colors bg-transparent border-none cursor-pointer outline-none uppercase font-medium tracking-widest text-xs">Dịch Vụ</button>
-          <button onClick={() => navigate('/portfolio')} className="hover:text-white transition-colors bg-transparent border-none cursor-pointer outline-none uppercase font-medium tracking-widest text-xs">Dự Án</button>
-          <button onClick={() => navigate('/home#process')} className="hover:text-white transition-colors bg-transparent border-none cursor-pointer outline-none uppercase font-medium tracking-widest text-xs">Quy Trình</button>
-          <button onClick={() => navigate('/home#calculator')} className="hover:text-white transition-colors bg-transparent border-none cursor-pointer outline-none uppercase font-medium tracking-widest text-xs">Bộ Tính Giá</button>
-        </nav>
-      </header>
+      <Header showBackBtn={true} />
 
       {/* ========================================================================= */}
       {/* MAIN CONTAINER */}
