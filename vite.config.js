@@ -8,9 +8,15 @@ export default defineConfig({
     react(),
     tailwindcss(), // Kích hoạt ở đây là xong, tự động quét sạch các file .jsx
   ],
-  // ĐA THÊM: Mở khóa cấu hình Server để expose cổng Network ra mạng Wi-Fi nội bộ
+  // Mở khóa cấu hình Server để expose cổng Network ra mạng Wi-Fi nội bộ
   server: {
     host: true,
-    port: 5173 // Khóa cứng cổng 5173 cho đồng bộ hệ thống
+    port: 3000,          // ← Đổi từ 5173 sang 3000
+    strictPort: true,    // ← Nếu port bận thì BÁO LỖI, không tự nhảy port khác
+    open: false          // ← Không tự mở browser (tuỳ chọn)
+  },
+  preview: {
+    port: 3000,
+    strictPort: true
   }
 })

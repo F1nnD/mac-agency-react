@@ -1,66 +1,103 @@
 const express = require('express');
 const router = express.Router();
-const Project = require('../models/Project'); 
+const Project = require('../models/Project');
+const { verifyToken, requireRole } = require('../middleware/authMiddleware');
 
-// 🟢 API 1: LẤY TOÀN BỘ DANH SÁCH DỰ ÁN TỪ DATABASE ATLAS
+// ===== CÔNG KHAI: Ai cũng xem được =====
+
+// GET /api/projects — Lấy toàn bộ danh sách dự án
 router.get('/', async (req, res) => {
   try {
-    const projects = await Project.find().sort({ createdAt: -1 }); // Dự án mới tạo xếp lên đầu
+    const projects = await Project.find().sort({ createdAt: -1 });
     res.json(projects);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
 
-// 🟢 API 2: LẤY CHI TIẾT MỘT DỰ ÁN QUA SLUG ĐỂ ĐỔ LÊN TRANG PROJECT-DETAIL
+// GET /api/projects/by-slug?breadcrumb=... — Chi tiết dự án theo slug
 router.get('/by-slug', async (req, res) => {
   try {
     const slug = req.query.breadcrumb;
     const project = await Project.findOne({ breadcrumb: slug });
-    if (!project) return res.status(404).json({ message: "Không tìm thấy dữ liệu không gian kiến trúc này!" });
+    if (!project) return res.status(404).json({ message: 'Không tìm thấy dự án!' });
     res.json(project);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
 
-// 🟢 API 3: TẠO MỚI DỰ ÁN HOÀN TOÀN (Lưu thẳng bối cảnh chuyên sâu và bộ 4 ảnh)
-router.post('/', async (req, res) => {
-  try {
-    // Bốc trọn gói dữ liệu dynamic từ req.body gửi lên để ném thẳng xuống DB
-    const newProject = new Project(req.body);
-    const savedProject = await newProject.save();
-    res.status(201).json({ message: "✅ Đã tạo mới dự án thành công xuống Database!", data: savedProject });
-  } catch (error) {
-    res.status(400).json({ message: "❌ Lỗi cấu trúc dữ liệu không hợp lệ!", error: error.message });
-  }
-});
+// ===== BẢO VỆ: Chỉ admin/staff mới được ghi =====
 
-// 🟢 API 4: CẬP NHẬT / SỬA ĐỔI THÔNG TIN DỰ ÁN ĐÃ CÓ SẴN TRÊN ATLAS
-router.put('/:id', async (req, res) => {
-  try {
-    const updatedProject = await Project.findByIdAndUpdate(
-      req.params.id,
-      { $set: req.body }, // Dùng toán tử $set để cập nhật linh hoạt mọi trường bối cảnh mới gửi lên
-      { new: true, runValidators: true } 
-    );
-    
-    if (!updatedProject) return res.status(404).json({ message: "Không tìm thấy dự án hợp lệ trên hệ thống!" });
-    res.json({ message: "✅ Cập nhật thông tin dự án thành công!", data: updatedProject });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
+// POST /api/projects — Tạo dự án mới
+router.post(
+  '/',
+  verifyToken,
+  requireRole('admin', 'staff'),
+  async (req, res) => {
+    try {
+      const newProject = new Project(req.body);
+      const savedProject = await newProject.save();
+      res.status(201).json({
+        success: true,
+        message: 'Đã tạo mới dự án thành công!',
+        data: savedProject
+      });
+    } catch (error) {
+      res.status(400).json({
+        success: false,
+        message: 'Lỗi cấu trúc dữ liệu không hợp lệ!',
+        error: error.message
+      });
+    }
   }
-});
+);
 
-// 🔴 API 5: XÓA VĨNH VIỄN DỰ ÁN KHỎI HỆ THỐNG DATABASE
-router.delete('/:id', async (req, res) => {
-  try {
-    const deletedProject = await Project.findByIdAndDelete(req.params.id);
-    if (!deletedProject) return res.status(404).json({ message: "Không tìm thấy mã dự án hợp lệ để xóa!" });
-    res.json({ message: "🗑️ Đã xóa hoàn toàn dự án thành công khỏi hệ thống!" });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
+// PUT /api/projects/:id — Cập nhật dự án
+router.put(
+  '/:id',
+  verifyToken,
+  requireRole('admin', 'staff'),
+  async (req, res) => {
+    try {
+      const updatedProject = await Project.findByIdAndUpdate(
+        req.params.id,
+        { $set: req.body },
+        { new: true, runValidators: true }
+      );
+      if (!updatedProject) {
+        return res.status(404).json({ message: 'Không tìm thấy dự án!' });
+      }
+      res.json({
+        success: true,
+        message: 'Cập nhật dự án thành công!',
+        data: updatedProject
+      });
+    } catch (error) {
+      res.status(500).json({ success: false, error: error.message });
+    }
   }
-});
+);
+
+// DELETE /api/projects/:id — Xoá dự án (chỉ admin)
+router.delete(
+  '/:id',
+  verifyToken,
+  requireRole('admin'),
+  async (req, res) => {
+    try {
+      const deletedProject = await Project.findByIdAndDelete(req.params.id);
+      if (!deletedProject) {
+        return res.status(404).json({ message: 'Không tìm thấy dự án!' });
+      }
+      res.json({
+        success: true,
+        message: 'Đã xoá dự án thành công!'
+      });
+    } catch (error) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  }
+);
 
 module.exports = router;

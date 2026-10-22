@@ -4,6 +4,7 @@ import gsap from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import { ScrollToPlugin } from 'gsap/ScrollToPlugin';
 import Header from '../components/Header';
+import { askAI, isPro } from '../utils/apiClient';
 
 gsap.registerPlugin(ScrollTrigger, ScrollToPlugin);
 
@@ -13,8 +14,7 @@ export default function Home() {
   const navigate = useNavigate();
 
   const [homeCurrentIdx, setHomeCurrentIdx] = useState(0);
-  const [portfolioData, setPortfolioData] = useState([]); 
-  
+  const [portfolioData, setPortfolioData] = useState([]);
   const [calcMode, setCalcMode] = useState('draft-filter');
 
   const [priceList, setPriceList] = useState({
@@ -64,7 +64,7 @@ export default function Home() {
           setPortfolioData(database);
         }
       } catch (error) {
-        console.error("Lỗi lốt dữ liệu portfolio nghệ thuật:", error);
+        console.error("Lỗi tải dữ liệu portfolio:", error);
       }
     }
 
@@ -86,7 +86,7 @@ export default function Home() {
           }
         }
       } catch (error) {
-        console.error("Lỗi đồng bộ đơn giá từ MongoDB:", error);
+        console.error("Lỗi đồng bộ đơn giá:", error);
       }
     }
 
@@ -116,8 +116,8 @@ export default function Home() {
   useEffect(() => {
     const currentImg = document.querySelector('.home-slide.active .slide-img');
     if (currentImg) {
-      gsap.fromTo(currentImg, 
-        { scale: 1.05, filter: "blur(4px)" }, 
+      gsap.fromTo(currentImg,
+        { scale: 1.05, filter: "blur(4px)" },
         { duration: 2, scale: 1, filter: "blur(0px)", ease: "power2.out" }
       );
     }
@@ -151,26 +151,35 @@ export default function Home() {
     }
   }, [area, siteFilter, draftList]);
 
+  // ===== AI PRO (Form nhanh) =====
   const handleGenerateFromForm = async (e) => {
     e.preventDefault();
+
+    if (!isPro()) {
+      alert('Tính năng tạo phối cảnh 3D chỉ dành cho gói Pro. Vui lòng nâng cấp để sử dụng.');
+      return;
+    }
+
     setAiLoading(true);
+    setAiResult(null);
+
     try {
-      const res = await fetch(`${API_BASE_URL}/api/ai-consult`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ style: aiStyle, area: aiArea, spaceType: aiSpaceType })
+      const data = await askAI({
+        style: aiStyle,
+        area: aiArea,
+        spaceType: aiSpaceType,
+        usePro: true
       });
-      if (res.ok) {
-        const data = await res.json();
-        setAiResult(data);
-      }
+      setAiResult(data);
     } catch (err) {
-      console.error("Lỗi AI Form:", err);
+      console.error('Lỗi AI Form:', err);
+      alert(err.message || 'Không thể kết nối AI. Vui lòng thử lại.');
     } finally {
       setAiLoading(false);
     }
   };
 
+  // ===== AI CHAT =====
   const handleSendChat = async (e) => {
     e.preventDefault();
     if (!chatInput.trim() || aiLoading) return;
@@ -178,19 +187,18 @@ export default function Home() {
     const msg = chatInput.trim();
     setChatInput('');
     setAiLoading(true);
+    setAiResult(null);
 
     try {
-      const res = await fetch(`${API_BASE_URL}/api/ai-consult`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userMessage: msg })
+      const useProEndpoint = isPro();
+      const data = await askAI({
+        userMessage: msg,
+        usePro: useProEndpoint
       });
-      if (res.ok) {
-        const data = await res.json();
-        setAiResult(data);
-      }
+      setAiResult(data);
     } catch (err) {
-      console.error("Lỗi AI Chat:", err);
+      console.error('Lỗi AI Chat:', err);
+      alert(err.message || 'Không thể kết nối AI. Vui lòng thử lại.');
     } finally {
       setAiLoading(false);
     }
@@ -212,17 +220,18 @@ export default function Home() {
 
       <div id="top"></div>
 
+      {/* HERO SECTION */}
       <section className="relative h-screen w-full flex items-center justify-center overflow-hidden bg-[#0b0b0b]">
         <div className="absolute inset-0 z-0 w-full h-full">
           <div className="absolute inset-0 bg-black/50 z-10 pointer-events-none"></div>
-          
+
           <div className={`home-slide absolute inset-0 w-full h-full overflow-hidden transition-opacity duration-1000 ease-in-out opacity-0 ${homeCurrentIdx === 0 ? 'active opacity-100' : ''}`}>
             <img src="/assets/pic/dedrip.jpg" alt="De Dripp Kafe" className="slide-img w-full h-full object-cover" />
             <div className="absolute bottom-12 left-6 md:left-16 z-20 overflow-hidden">
               <span className="project-tag text-[11px] tracking-[0.25em] text-white/50 uppercase block">Dự án 01 / De Dripp Kafe</span>
             </div>
           </div>
-          
+
           <div className={`home-slide absolute inset-0 w-full h-full overflow-hidden transition-opacity duration-1000 ease-in-out opacity-0 ${homeCurrentIdx === 1 ? 'active opacity-100' : ''}`}>
             <img src="/assets/pic/themonic.jpg" alt="The Monic Coffee" className="slide-img w-full h-full object-cover" />
             <div className="absolute bottom-12 left-6 md:left-16 z-20 overflow-hidden">
@@ -237,7 +246,7 @@ export default function Home() {
             </div>
           </div>
         </div>
-    
+
         <div className="relative z-20 max-w-5xl mx-auto text-center px-6 pointer-events-none">
           <span className="text-xs md:text-sm font-semibold tracking-[0.35em] text-gray-300 uppercase mb-5 block">Thiết Kế • Thi Công • Setup • Vận Hành</span>
           <h1 className="text-3xl md:text-6xl font-bold tracking-tight text-white mb-6 leading-none select-none uppercase">
@@ -246,7 +255,7 @@ export default function Home() {
           <p className="text-gray-200/80 text-sm md:text-lg font-light max-w-3xl mx-auto mb-12 leading-relaxed tracking-wide">
             Hiện thực hóa những ý tưởng không gian F&B độc đáo mang tính nghệ thuật cao, tối ưu công năng vận hành thực tế.
           </p>
-          
+
           <div className="flex flex-col sm:flex-row items-center justify-center gap-5 pointer-events-auto">
             <a href="#portfolio" onClick={(e) => handleSmoothScroll(e, '#portfolio')} className="w-full sm:w-auto bg-white text-black px-10 py-4 rounded-full text-xs font-semibold tracking-widest uppercase hover:bg-neutral-200 transition-all text-center cursor-pointer">
               Khám phá dự án
@@ -256,7 +265,7 @@ export default function Home() {
             </a>
           </div>
         </div>
-    
+
         <div className="absolute bottom-12 right-6 md:right-16 z-20 flex items-center gap-2 pointer-events-auto">
           <button onClick={() => setHomeCurrentIdx(0)} className={`home-dot h-2 rounded-full transition-all duration-300 cursor-pointer ${homeCurrentIdx === 0 ? 'w-6 bg-white' : 'w-2 bg-white/40'}`}></button>
           <button onClick={() => setHomeCurrentIdx(1)} className={`home-dot h-2 rounded-full transition-all duration-300 cursor-pointer ${homeCurrentIdx === 1 ? 'w-6 bg-white' : 'w-2 bg-white/40'}`}></button>
@@ -264,6 +273,7 @@ export default function Home() {
         </div>
       </section>
 
+      {/* ABOUT SECTION */}
       <section id="about" className="fade-in-section py-28 px-6 md:px-16 w-full border-t border-white/5 grid grid-cols-1 md:grid-cols-3 gap-16 scroll-mt-20 text-left">
         <div className="flex flex-col justify-between h-full space-y-6">
           <div className="space-y-2">
@@ -293,6 +303,7 @@ export default function Home() {
         </div>
       </section>
 
+      {/* SERVICES SECTION */}
       <section id="services" className="py-24 bg-[#0b0b0b] w-full border-y border-white/5 scroll-mt-20">
         <div className="px-6 md:px-16 mb-12 text-left select-none">
           <span className="text-xs tracking-[0.3em] text-white/40 uppercase block mb-1">Our Expertise</span>
@@ -304,7 +315,7 @@ export default function Home() {
             <img src="/assets/pic/ARCHI.jpg" alt="Thiết kế" className="absolute inset-0 w-full h-full object-cover opacity-35 group-hover:opacity-60 group-hover:scale-105 transition-all duration-700 ease-in-out z-0 block" />
             <span className="relative z-20 text-2xl font-bold text-white/10 font-mono transition-colors duration-500 group-hover:text-white/30">01</span>
             <div className="relative z-20 space-y-2">
-              <h3 className="text-lg font-semibold text-white/80 transition-all duration-500 group-hover:text-white group-hover:-translate-y-1">{`Thiết Kế & Thi Công`}</h3>
+              <h3 className="text-lg font-semibold text-white/80 transition-all duration-500 group-hover:text-white group-hover:-translate-y-1">Thiết Kế & Thi Công</h3>
               <p className="text-sm text-gray-500 font-light leading-relaxed transition-colors duration-500 group-hover:text-gray-300">Tối ưu kiến trúc phần cứng, hiện thực hóa bản vẽ ra công trường chuẩn xác.</p>
             </div>
           </div>
@@ -313,7 +324,7 @@ export default function Home() {
             <img src="/assets/pic/SETUP.jpg" alt="Setup" className="absolute inset-0 w-full h-full object-cover opacity-35 group-hover:opacity-60 group-hover:scale-105 transition-all duration-700 ease-in-out z-0 block" />
             <span className="relative z-20 text-2xl font-bold text-white/10 font-mono transition-colors duration-500 group-hover:text-white/30">02</span>
             <div className="relative z-20 space-y-2">
-              <h3 className="text-lg font-semibold text-white/80 transition-all duration-500 group-hover:text-white group-hover:-translate-y-1">{`Setup & Vận Hành`}</h3>
+              <h3 className="text-lg font-semibold text-white/80 transition-all duration-500 group-hover:text-white group-hover:-translate-y-1">Setup & Vận Hành</h3>
               <p className="text-sm text-gray-500 font-light leading-relaxed transition-colors duration-500 group-hover:text-gray-300">Bố trí công năng quầy bar nghệ thuật, chuyển giao giải pháp quản lý F&B.</p>
             </div>
           </div>
@@ -338,6 +349,7 @@ export default function Home() {
         </div>
       </section>
 
+      {/* PORTFOLIO SECTION */}
       <section id="portfolio" className="fade-in-section py-24 px-6 md:px-16 w-full scroll-mt-20 text-left">
         <div className="flex items-end justify-between border-b border-white/5 mb-12 pb-5">
           <div>
@@ -351,7 +363,7 @@ export default function Home() {
             if (!proj) return null;
             const uniqueReactKey = proj._id || `home-proj-${index}`;
             const colSpan = (index % 3 === 0) ? 'md:col-span-2 aspect-[16/9]' : 'md:col-span-1';
-            
+
             const checkImg = (p) => {
               if (!p) return '';
               if (p.startsWith('http://') || p.startsWith('https://') || p.startsWith('data:') || p.startsWith('/')) return p;
@@ -366,18 +378,18 @@ export default function Home() {
                 <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-transparent z-10 pointer-events-none"></div>
                 <img src={fixImg1} alt={proj.name} loading="lazy" decoding="async" className="absolute inset-0 w-full h-full object-cover group-hover:scale-102 transition-transform duration-700 ease-in-out z-0 block" />
                 <img src={fixImg2} alt={`${proj.name} Hover`} loading="lazy" decoding="async" className="absolute inset-0 w-full h-full object-cover opacity-0 group-hover:opacity-100 transition-opacity duration-700 ease-in-out z-5 block" />
-                
+
                 <div className="absolute bottom-0 left-0 w-full p-8 z-20 flex justify-between items-end">
                   <div>
                     <span className="text-[10px] uppercase tracking-wider text-white/40 block mb-1 font-mono">{proj.type}</span>
-                    <h3 
+                    <h3
                       className="text-2xl font-bold text-white uppercase"
                       dangerouslySetInnerHTML={{ __html: proj.name || proj.breadcrumb }}
-                    /> 
+                    />
                   </div>
-                  
-                  <button 
-                    onClick={() => navigate(`/project-detail?id=${proj.breadcrumb}`)} 
+
+                  <button
+                    onClick={() => navigate(`/project-detail?id=${proj.breadcrumb}`)}
                     className="inline-flex items-center gap-2 text-xs tracking-widest uppercase font-semibold text-white bg-black/50 border border-white/20 backdrop-blur-sm px-5 py-3 rounded-full opacity-100 translate-y-0 md:opacity-0 md:translate-y-2 group-hover:opacity-100 group-hover:translate-y-0 hover:bg-white hover:text-black hover:scale-105 hover:border-white transition-all duration-500 ease-out shadow-lg cursor-pointer z-30 mt-4 md:mt-0 outline-none"
                   >
                     <span>Xem chi tiết</span>
@@ -389,6 +401,7 @@ export default function Home() {
         </div>
       </section>
 
+      {/* PROCESS SECTION */}
       <section id="process" className="fade-in-section py-24 px-6 md:px-16 w-full border-t border-white/5 scroll-mt-20 text-left bg-[#080808]">
         <div className="max-w-7xl mx-auto space-y-12">
           <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 border-b border-white/5 pb-6">
@@ -437,9 +450,10 @@ export default function Home() {
         </div>
       </section>
 
+      {/* CALCULATOR SECTION */}
       <section id="calculator" className="bg-[#050505] py-24 px-6 md:px-16 border-t border-white/5 select-none scroll-mt-20 text-left w-full">
         <div className="max-w-7xl mx-auto space-y-10">
-          
+
           <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 border-b border-white/5 pb-8">
             <div>
               <span className="text-[10px] tracking-[0.3em] text-white/30 uppercase block mb-2 font-mono">Multi-Option Estimator</span>
@@ -451,22 +465,42 @@ export default function Home() {
                 onClick={() => setCalcMode('draft-filter')}
                 className={`px-5 py-3 rounded-xl text-xs font-bold tracking-wider uppercase transition-all duration-300 cursor-pointer outline-none ${calcMode === 'draft-filter' ? 'bg-amber-400 text-black shadow-lg shadow-amber-400/10' : 'text-gray-400 hover:text-white'}`}
               >
-                📐 Gợi Ý Draft Theo m²
+                Gợi Ý Draft Theo m²
               </button>
               <button
                 onClick={() => setCalcMode('quick-calc')}
                 className={`px-5 py-3 rounded-xl text-xs font-bold tracking-wider uppercase transition-all duration-300 cursor-pointer outline-none ${calcMode === 'quick-calc' ? 'bg-white text-black shadow-lg' : 'text-gray-400 hover:text-white'}`}
               >
-                ⚡ Gói Định Biên Nhanh
+                Gói Định Biên Nhanh
               </button>
               <button
                 onClick={() => setCalcMode('ai-chat')}
                 className={`px-5 py-3 rounded-xl text-xs font-bold tracking-wider uppercase transition-all duration-300 cursor-pointer outline-none ${calcMode === 'ai-chat' ? 'bg-emerald-400 text-black shadow-lg shadow-emerald-400/10' : 'text-gray-400 hover:text-white'}`}
               >
-                🤖 AI Visual Studio & Chat
+                AI Visual Studio & Chat
               </button>
             </div>
           </div>
+
+          {calcMode === 'ai-chat' && (
+            <div className="flex flex-wrap items-center justify-end gap-3 -mt-4">
+              <span className={`text-[10px] tracking-widest uppercase font-bold px-3 py-1.5 rounded-full border ${
+                isPro()
+                  ? 'text-emerald-400 border-emerald-500/30 bg-emerald-500/5'
+                  : 'text-white/50 border-white/10 bg-white/5'
+              }`}>
+                {isPro() ? 'Gói Pro' : 'Gói Free'}
+              </span>
+              {!isPro() && (
+                <button
+                  onClick={() => navigate('/pricing')}
+                  className="text-[10px] tracking-widest uppercase font-bold text-amber-400 hover:text-amber-300 border border-amber-400/40 px-3 py-1.5 rounded-full transition-all cursor-pointer bg-transparent outline-none"
+                >
+                  Nâng cấp Pro
+                </button>
+              )}
+            </div>
+          )}
 
           {calcMode === 'draft-filter' && (
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-stretch animate-fadeIn">
@@ -476,23 +510,23 @@ export default function Home() {
                     <div className="space-y-2">
                       <label className="text-xs tracking-widest uppercase font-semibold text-white/60 block">1. Diện tích mặt bằng (m²)</label>
                       <div className="relative">
-                        <input 
-                          type="number" 
+                        <input
+                          type="number"
                           value={area}
-                          min="10" 
-                          max="5000" 
+                          min="10"
+                          max="5000"
                           onChange={(e) => setArea(parseFloat(e.target.value) || 0)}
-                          className="w-full bg-black/40 border border-white/10 rounded-xl px-5 py-3.5 text-white font-medium text-lg focus:outline-none focus:border-amber-400/50 transition-colors font-mono" 
+                          className="w-full bg-black/40 border border-white/10 rounded-xl px-5 py-3.5 text-white font-medium text-lg focus:outline-none focus:border-amber-400/50 transition-colors font-mono"
                         />
-                        <span className="absolute right-5 top-1/2 transform -translate-y-1/2 text-xs tracking-wider text-white/40 font-medium">M²</span>
+                        <span className="absolute right-5 top-1/2 transform -translate-y-1/2 text-xs tracking-wider text-white/40 font-medium">m²</span>
                       </div>
                     </div>
 
                     <div className="space-y-2">
                       <label className="text-xs tracking-widest uppercase font-semibold text-white/60 block">2. Hiện trạng thực tế</label>
-                      <select 
-                        value={siteFilter} 
-                        onChange={(e) => setSiteFilter(e.target.value)} 
+                      <select
+                        value={siteFilter}
+                        onChange={(e) => setSiteFilter(e.target.value)}
                         className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-4 text-xs text-white focus:outline-none focus:border-amber-400/50 cursor-pointer font-sans"
                       >
                         <option value="all" className="bg-neutral-900 text-white">Tất cả hiện trạng</option>
@@ -511,7 +545,7 @@ export default function Home() {
                     {filteredDrafts.length > 0 ? (
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-[300px] overflow-y-auto pr-2 scrollbar-thin">
                         {filteredDrafts.map((draft, idx) => (
-                          <div 
+                          <div
                             key={draft._id || idx}
                             onClick={() => setSelectedDraft(draft)}
                             className={`relative border rounded-xl p-4 cursor-pointer transition-all block select-none ${selectedDraft?._id === draft._id ? 'border-amber-400 bg-amber-400/10 shadow-lg shadow-amber-400/5' : 'border-white/10 bg-black/20 hover:border-white/30'}`}
@@ -532,7 +566,7 @@ export default function Home() {
                     ) : (
                       <div className="p-8 text-center bg-black/30 border border-dashed border-white/10 rounded-2xl space-y-2">
                         <p className="text-xs text-amber-400 font-semibold uppercase tracking-wider">Không tìm thấy Draft phù hợp khoảng {area}m²</p>
-                        <p className="text-[11px] text-gray-500 font-light">Bạn hãy thử thay đổi số m² hoặc chọn Hiện trạng "Tất cả" nhen.</p>
+                        <p className="text-[11px] text-gray-500 font-light">Bạn hãy thử thay đổi số m² hoặc chọn Hiện trạng "Tất cả" nhé.</p>
                       </div>
                     )}
                   </div>
@@ -589,15 +623,14 @@ export default function Home() {
 
                 <div className="pt-4 border-t border-neutral-200">
                   <a
-                    href="https://zalo.me/0375075975" 
+                    href="https://zalo.me/0375075975"
                     target="_blank"
                     rel="noopener noreferrer"
                     className="w-full bg-neutral-900 hover:bg-black text-white text-center py-4 px-4 rounded-xl text-xs font-bold uppercase tracking-widest transition-all duration-300 shadow-md flex items-center justify-center gap-2 cursor-pointer text-decoration-none"
                   >
-                    <span>💬 Tư Vấn Chi Tiết Zalo</span>
+                    <span>Tư Vấn Chi Tiết Zalo</span>
                   </a>
                 </div>
-
               </div>
             </div>
           )}
@@ -609,22 +642,22 @@ export default function Home() {
                   <div className="space-y-3">
                     <label className="text-xs tracking-widest uppercase font-semibold text-white/60 block">1. Nhập diện tích mặt bằng (m²)</label>
                     <div className="relative">
-                      <input 
-                        type="number" 
+                      <input
+                        type="number"
                         value={area}
-                        min="10" 
-                        max="5000" 
+                        min="10"
+                        max="5000"
                         onChange={(e) => setArea(parseFloat(e.target.value) || 0)}
-                        className="w-full bg-black/40 border border-white/10 rounded-xl px-5 py-4 text-white font-medium text-lg focus:outline-none focus:border-white/40 transition-colors font-mono" 
+                        className="w-full bg-black/40 border border-white/10 rounded-xl px-5 py-4 text-white font-medium text-lg focus:outline-none focus:border-white/40 transition-colors font-mono"
                       />
-                      <span className="absolute right-5 top-1/2 transform -translate-y-1/2 text-sm tracking-wider text-white/40 font-medium font-sans">M²</span>
+                      <span className="absolute right-5 top-1/2 transform -translate-y-1/2 text-sm tracking-wider text-white/40 font-medium font-sans">m²</span>
                     </div>
                   </div>
                   <div className="space-y-4">
                     <label className="text-xs tracking-widest uppercase font-semibold text-white/60 block">2. Chọn gói giải pháp chiến lược</label>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      
-                      <div 
+
+                      <div
                         onClick={() => setSelectedPackage("concept")}
                         className={`package-card relative border rounded-xl p-4 cursor-pointer transition-all block select-none ${selectedPackage === 'concept' ? 'border-white bg-white/5' : 'border-white/10 bg-black/20 hover:border-white/30'}`}
                       >
@@ -640,7 +673,7 @@ export default function Home() {
                         </div>
                       </div>
 
-                      <div 
+                      <div
                         onClick={() => setSelectedPackage("build")}
                         className={`package-card relative border rounded-xl p-4 cursor-pointer transition-all block select-none ${selectedPackage === 'build' ? 'border-white bg-white/5' : 'border-white/10 bg-black/20 hover:border-white/30'}`}
                       >
@@ -656,7 +689,7 @@ export default function Home() {
                         </div>
                       </div>
 
-                      <div 
+                      <div
                         onClick={() => setSelectedPackage("combo")}
                         className={`package-card relative border rounded-xl p-4 cursor-pointer transition-all block select-none ${selectedPackage === 'combo' ? 'border-white bg-white/5' : 'border-white/10 bg-black/20 hover:border-white/30'}`}
                       >
@@ -672,7 +705,7 @@ export default function Home() {
                         </div>
                       </div>
 
-                      <div 
+                      <div
                         onClick={() => setSelectedPackage("landscape")}
                         className={`package-card relative border rounded-xl p-4 cursor-pointer transition-all block select-none ${selectedPackage === 'landscape' ? 'border-white bg-white/5' : 'border-white/10 bg-black/20 hover:border-white/30'}`}
                       >
@@ -733,30 +766,29 @@ export default function Home() {
 
                 <div className="pt-4 border-t border-neutral-200 grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <a
-                    href="https://zalo.me/0375075975" 
+                    href="https://zalo.me/0375075975"
                     target="_blank"
                     rel="noopener noreferrer"
                     className="w-full bg-neutral-900 hover:bg-black text-white text-center py-3.5 px-3 rounded-xl text-[11px] font-bold uppercase tracking-wider transition-all duration-300 shadow-md flex items-center justify-center gap-1.5 cursor-pointer text-decoration-none"
                   >
-                    <span>💬 Tư Vấn Chi Tiết Zalo</span>
+                    <span>Tư Vấn Chi Tiết Zalo</span>
                   </a>
                   <button
                     onClick={() => navigate('/packages')}
                     className="w-full bg-neutral-100 hover:bg-neutral-200 text-neutral-800 text-center py-3.5 px-3 rounded-xl text-[11px] font-bold uppercase tracking-wider transition-all duration-300 border border-neutral-300 flex items-center justify-center gap-1 cursor-pointer outline-none"
                   >
-                    <span>⚡ Các Gói Định Biên</span>
+                    <span>Các Gói Định Biên</span>
                   </button>
                 </div>
-
               </div>
             </div>
           )}
 
           {calcMode === 'ai-chat' && (
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-stretch animate-fadeIn">
-              
+
               <div className="lg:col-span-6 space-y-6 bg-zinc-900/30 border border-emerald-500/20 p-6 md:p-8 rounded-2xl backdrop-blur-sm flex flex-col justify-between">
-                
+
                 <form onSubmit={handleGenerateFromForm} className="space-y-4 border-b border-emerald-500/20 pb-6">
                   <div className="space-y-1">
                     <span className="text-[10px] tracking-[0.3em] text-emerald-400 font-mono uppercase block">Cách 1: Tùy Chọn Nhanh Cố Định</span>
@@ -765,28 +797,28 @@ export default function Home() {
 
                   <div className="space-y-1.5">
                     <label className="text-[11px] tracking-wider uppercase font-semibold text-gray-400 block">1. Loại hình công trình mong muốn</label>
-                    <select 
-                      value={aiSpaceType} 
+                    <select
+                      value={aiSpaceType}
                       onChange={(e) => setAiSpaceType(e.target.value)}
                       className="w-full bg-black/50 border border-emerald-500/30 rounded-xl px-3 py-2.5 text-xs text-white focus:outline-none focus:border-emerald-400 cursor-pointer font-sans"
                     >
-                      <option value="Nhà Ở Dân Dụng / Nhà Phố" className="bg-neutral-900 text-white">🏠 Nhà Ở Dân Dụng / Nhà Phố</option>
-                      <option value="Biệt Thự Cao Cấp" className="bg-neutral-900 text-white">🏰 Biệt Thự Cao Cấp / Villa</option>
-                      <option value="Quán Kafe & Trà Sữa" className="bg-neutral-900 text-white">☕ Quán Kafe & Trà Sữa F&B</option>
-                      <option value="Nhà Hàng F&B Trọn Gói" className="bg-neutral-900 text-white">🍽️ Nhà Hàng F&B Trọn Gói</option>
-                      <option value="Bar & Bistro Thượng Lưu" className="bg-neutral-900 text-white">🍸 Bar & Bistro Thượng Lưu</option>
+                      <option value="Nhà Ở Dân Dụng / Nhà Phố" className="bg-neutral-900 text-white">Nhà Ở Dân Dụng / Nhà Phố</option>
+                      <option value="Biệt Thự Cao Cấp" className="bg-neutral-900 text-white">Biệt Thự Cao Cấp / Villa</option>
+                      <option value="Quán Kafe & Trà Sữa" className="bg-neutral-900 text-white">Quán Kafe & Trà Sữa F&B</option>
+                      <option value="Nhà Hàng F&B Trọn Gói" className="bg-neutral-900 text-white">Nhà Hàng F&B Trọn Gói</option>
+                      <option value="Bar & Bistro Thượng Lưu" className="bg-neutral-900 text-white">Bar & Bistro Thượng Lưu</option>
                     </select>
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="space-y-1.5">
                       <label className="text-[11px] tracking-wider uppercase font-semibold text-gray-400 block">2. Phong cách kiến trúc</label>
-                      <select 
-                        value={aiStyle} 
+                      <select
+                        value={aiStyle}
                         onChange={(e) => setAiStyle(e.target.value)}
                         className="w-full bg-black/50 border border-emerald-500/30 rounded-xl px-3 py-2.5 text-xs text-white focus:outline-none focus:border-emerald-400 cursor-pointer font-sans"
                       >
-                        <option value="Industrial" className="bg-neutral-900 text-white">Industrial (Xi măng • Thép)</option>
+                        <option value="Industrial" className="bg-neutral-900 text-white">Industrial (Xi măng, Thép)</option>
                         <option value="Minimalism" className="bg-neutral-900 text-white">Minimalism (Tối giản)</option>
                         <option value="Japandi" className="bg-neutral-900 text-white">Japandi (Gỗ ấm cúng)</option>
                         <option value="Modern Classic" className="bg-neutral-900 text-white">Modern Classic (Tân cổ điển)</option>
@@ -796,8 +828,8 @@ export default function Home() {
 
                     <div className="space-y-1.5">
                       <label className="text-[11px] tracking-wider uppercase font-semibold text-gray-400 block">3. Diện tích m²</label>
-                      <input 
-                        type="number" 
+                      <input
+                        type="number"
                         value={aiArea}
                         min="20"
                         max="2000"
@@ -812,18 +844,18 @@ export default function Home() {
                     disabled={aiLoading}
                     className="w-full bg-emerald-500 hover:bg-emerald-400 text-black py-3 px-4 rounded-xl text-xs font-bold uppercase tracking-wider transition-all cursor-pointer border-none outline-none disabled:opacity-50"
                   >
-                    {aiLoading ? '⚡ AI Đang Render 8K FLUX...' : '✨ Tạo Phối Cảnh & Dự Toán Tức Thì'}
+                    {aiLoading ? 'AI Đang Render 8K...' : 'Tạo Phối Cảnh & Dự Toán'}
                   </button>
                 </form>
 
                 <div className="space-y-3 pt-2">
-                  <span className="text-[10px] tracking-[0.3em] text-emerald-400 font-mono uppercase block">Cách 2: Trò Chuyện Trực Tiếp Cùng KTS AI (Hiểu Mọi Ngôn Ngữ)</span>
+                  <span className="text-[10px] tracking-[0.3em] text-emerald-400 font-mono uppercase block">Cách 2: Trò Chuyện Trực Tiếp Cùng KTS AI</span>
                   <form onSubmit={handleSendChat} className="flex gap-2">
-                    <input 
-                      type="text" 
+                    <input
+                      type="text"
                       value={chatInput}
                       onChange={(e) => setChatInput(e.target.value)}
-                      placeholder="Gõ ý tưởng: 'làm nhà ở 200m2', 'design a cafe 100m2', 'hi hello'..."
+                      placeholder="Gõ ý tưởng: 'làm nhà ở 200m2', 'design a cafe 100m2'..."
                       className="flex-1 bg-black/60 border border-emerald-500/30 rounded-xl px-4 py-3 text-xs text-white focus:outline-none focus:border-emerald-400 font-sans"
                     />
                     <button
@@ -835,33 +867,44 @@ export default function Home() {
                     </button>
                   </form>
                 </div>
-
               </div>
 
               <div className="lg:col-span-6 bg-white text-black p-6 md:p-8 rounded-2xl shadow-2xl flex flex-col justify-between relative overflow-hidden space-y-6">
-                
+
                 {aiLoading ? (
                   <div className="w-full h-full min-h-[380px] flex flex-col items-center justify-center space-y-4 py-12">
                     <div className="w-12 h-12 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin"></div>
-                    <p className="text-xs font-mono uppercase tracking-widest text-neutral-500">KTS AI đang phân tích ngôn ngữ & Render 3D FLUX 8K...</p>
+                    <p className="text-xs font-mono uppercase tracking-widest text-neutral-500">KTS AI đang phân tích & render 3D FLUX 8K...</p>
                   </div>
                 ) : aiResult ? (
                   <div className="space-y-4 animate-fadeIn">
                     <div className="text-center pb-2 border-b border-dashed border-neutral-300">
                       <span className="text-[9px] uppercase tracking-[0.25em] text-emerald-600 font-bold font-mono block">AI Consultant & Render Result</span>
-                      <h4 className="text-sm font-bold uppercase">{aiResult.spaceType} • {aiResult.style}</h4>
+                      <h4 className="text-sm font-bold uppercase">{aiResult.spaceType} - {aiResult.style}</h4>
                     </div>
 
                     {!aiResult.isPureChat && aiResult.aiImageUrl && (
-                      <div className="w-full aspect-video rounded-xl border border-neutral-200 overflow-hidden shadow-inner relative group bg-black">
-                        <img src={aiResult.aiImageUrl} alt="AI Visual Result" className="w-full h-full object-cover block" />
-                        <span className="absolute bottom-2 right-2 bg-black/80 backdrop-blur-md text-emerald-400 text-[9px] font-mono px-2 py-1 rounded">FLUX 8K Render</span>
+                      <div className="w-full aspect-video rounded-xl border border-neutral-200 overflow-hidden shadow-inner relative group bg-neutral-100">
+                        <img 
+                          src={aiResult.aiImageUrl} 
+                          alt="AI Visual Result" 
+                          className="w-full h-full object-cover block animate-[fadeIn_0.5s_ease-in-out]" 
+                        />
+                        <span className="absolute bottom-2 right-2 bg-black/80 backdrop-blur-md text-emerald-400 text-[9px] font-mono px-2 py-1 rounded shadow-lg">
+                          AI Render 2K
+                        </span>
                       </div>
                     )}
 
                     <p className="text-[11px] text-neutral-700 font-light leading-relaxed bg-neutral-50 p-3 rounded-lg border border-neutral-200">
                       "{aiResult.replyText}"
                     </p>
+
+                    {aiResult.remaining !== undefined && (
+                      <div className="text-[10px] text-neutral-400 font-mono text-right">
+                        Lượt còn lại hôm nay: {aiResult.remaining} / {aiResult.tier}
+                      </div>
+                    )}
 
                     {!aiResult.isPureChat && (
                       <>
@@ -898,22 +941,21 @@ export default function Home() {
                   </div>
                 ) : (
                   <div className="w-full h-full min-h-[380px] flex flex-col items-center justify-center text-center p-8 border-2 border-dashed border-neutral-200 rounded-xl space-y-3">
-                    <div className="w-12 h-12 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center text-xl">🤖</div>
                     <h4 className="text-xs font-bold uppercase tracking-wider text-neutral-700">Trạm Phối Cảnh & Trò Chuyện KTS AI</h4>
                     <p className="text-[11px] text-neutral-400 font-light max-w-xs">
-                      Bạn có thể chọn Form nhanh ở trên HOẶC trò chuyện bằng bất kỳ ngôn ngữ nào ở dưới, KTS AI sẽ trả lời và phác thảo phối cảnh 8K ngay!
+                      Bạn có thể chọn Form nhanh ở trên hoặc trò chuyện bằng bất kỳ ngôn ngữ nào ở dưới, KTS AI sẽ trả lời và phác thảo phối cảnh 8K ngay!
                     </p>
                   </div>
                 )}
 
                 <div className="pt-3 border-t border-neutral-200">
                   <a
-                    href="https://zalo.me/0375075975" 
+                    href="https://zalo.me/0375075975"
                     target="_blank"
                     rel="noopener noreferrer"
                     className="w-full bg-neutral-900 hover:bg-black text-white text-center py-3.5 px-4 rounded-xl text-xs font-bold uppercase tracking-widest transition-all duration-300 shadow-md flex items-center justify-center gap-2 cursor-pointer text-decoration-none"
                   >
-                    <span>💬 Nhận Bản Vẽ Chi Tiết Qua Zalo</span>
+                    <span>Nhận Bản Vẽ Chi Tiết Qua Zalo</span>
                   </a>
                 </div>
 
@@ -927,19 +969,19 @@ export default function Home() {
 
       <footer id="contact" className="bg-black py-20 px-6 md:px-16 border-t border-white/5 w-full text-left">
         <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-4 gap-12 text-sm text-gray-500 font-light leading-relaxed">
-          
+
           <div className="space-y-4">
             <h3 className="text-2xl font-bold text-white tracking-widest">MAC</h3>
-            <p>📍 44 Nguyễn Văn Dung, Phường 6, Gò Vấp, TP. Hồ Chí Minh</p>
-            <p>📞 0375075975</p>
-            <p>✉️ maconcept.asia@gmail.com</p>
+            <p>44 Nguyễn Văn Dung, Phường 6, Gò Vấp, TP. Hồ Chí Minh</p>
+            <p>Điện thoại: 0375075975</p>
+            <p>Email: maconcept.asia@gmail.com</p>
           </div>
 
           <div className="space-y-3">
             <h4 className="text-white font-semibold tracking-wider uppercase mb-2">Dịch Vụ Chính</h4>
-            <p>• Thiết kế & Thi công kiến trúc chuyên sâu F&B</p>
-            <p>• Thiết kế biệt thự nhà vườn cao cấp</p>
-            <p>• Thiết kế cảnh quan tích hợp hồ cá Koi nghệ thuật</p>
+            <p>- Thiết kế & Thi công kiến trúc chuyên sâu F&B</p>
+            <p>- Thiết kế biệt thự nhà vườn cao cấp</p>
+            <p>- Thiết kế cảnh quan tích hợp hồ cá Koi nghệ thuật</p>
           </div>
 
           <div className="space-y-3">
@@ -954,10 +996,10 @@ export default function Home() {
           <div className="space-y-5">
             <h4 className="text-white font-semibold tracking-wider uppercase">Yêu Cầu Báo Giá</h4>
             <p>Hotline tư vấn kỹ thuật trực tiếp: <strong className="text-white text-base">0375075975</strong></p>
-            <a 
-              href="https://zalo.me/0375075975" 
-              target="_blank" 
-              rel="noreferrer" 
+            <a
+              href="https://zalo.me/0375075975"
+              target="_blank"
+              rel="noreferrer"
               className="block bg-white text-black font-bold text-center uppercase tracking-widest text-xs px-6 py-4 rounded-xl w-full hover:bg-gray-200 transition-all leading-none cursor-pointer"
             >
               Kết nối nhận tư vấn trực tiếp
