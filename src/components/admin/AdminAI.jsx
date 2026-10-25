@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
-import { askAI } from '../../utils/apiClient';
-
+import { askAdminAI } from "../../utils/apiClient";
 export default function AdminAI() {
   const [chatInput, setChatInput] = useState('');
   const [messages, setMessages] = useState([]);
@@ -17,11 +16,11 @@ export default function AdminAI() {
 
     try {
       // Admin luôn dùng endpoint Pro (quyền cao nhất)
-      const data = await askAI({
-        userMessage: msg,
-        chatHistory: messages,
-        usePro: true
-      });
+            // Gọi hàm askAdminAI (Tầng 3 - Đầu chuỗi)
+            const data = await askAdminAI({
+                userMessage: msg,
+                chatHistory: messages
+              });
 
       setMessages(prev => [...prev, { role: 'ai', text: data.replyText, image: data.aiImageUrl }]);
     } catch (err) {
