@@ -33,9 +33,21 @@ export default function Home() {
   const [aiSpaceType, setAiSpaceType] = useState('Quán Kafe & Trà Sữa');
   const [aiStyle, setAiStyle] = useState('Industrial');
   const [aiArea, setAiArea] = useState(120);
+  
+  // State cho Chat (Lưu vào localStorage để không mất khi F5)
   const [chatInput, setChatInput] = useState('');
+  const [chatMessages, setChatMessages] = useState(() => {
+    const saved = localStorage.getItem('mac_chat_history');
+    return saved ? JSON.parse(saved) : [];
+  });
+  
   const [aiLoading, setAiLoading] = useState(false);
   const [aiResult, setAiResult] = useState(null);
+
+  // Lưu lịch sử chat
+  useEffect(() => {
+    localStorage.setItem('mac_chat_history', JSON.stringify(chatMessages));
+  }, [chatMessages]);
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -171,6 +183,13 @@ export default function Home() {
         usePro: true
       });
       setAiResult(data);
+      
+      // Thêm vào khung chat luôn để đồng bộ
+      setChatMessages(prev => [
+        ...prev, 
+        { role: 'user', text: `[Tạo phối cảnh tự động] ${aiSpaceType} - ${aiStyle} - ${aiArea}m2` },
+        { role: 'ai', text: data.replyText, image: data.aiImageUrl }
+      ]);
     } catch (err) {
       console.error('Lỗi AI Form:', err);
       alert(err.message || 'Không thể kết nối AI. Vui lòng thử lại.');
@@ -179,7 +198,7 @@ export default function Home() {
     }
   };
 
-  // ===== AI CHAT =====
+  // ===== AI CHAT (Giao diện chat qua lại) =====
   const handleSendChat = async (e) => {
     e.preventDefault();
     if (!chatInput.trim() || aiLoading) return;
@@ -187,18 +206,35 @@ export default function Home() {
     const msg = chatInput.trim();
     setChatInput('');
     setAiLoading(true);
-    setAiResult(null);
+
+    const newUserMsg = { role: 'user', text: msg };
+    const updatedHistory = [...chatMessages, newUserMsg];
+    setChatMessages(updatedHistory);
 
     try {
       const useProEndpoint = isPro();
       const data = await askAI({
         userMessage: msg,
-        usePro: useProEndpoint
+        chatHistory: chatMessages,
+        usePro: useProEndpoint,
+        style: aiStyle, area: aiArea, spaceType: aiSpaceType
       });
-      setAiResult(data);
+      
+      setChatMessages([
+        ...updatedHistory, 
+        { role: 'ai', text: data.replyText, image: data.aiImageUrl }
+      ]);
+      
+      if (!data.isPureChat) {
+        setAiResult(data);
+      }
+      
     } catch (err) {
       console.error('Lỗi AI Chat:', err);
-      alert(err.message || 'Không thể kết nối AI. Vui lòng thử lại.');
+      setChatMessages([
+        ...updatedHistory, 
+        { role: 'ai', text: 'Lỗi kết nối đến AI. Vui lòng thử lại.' }
+      ]);
     } finally {
       setAiLoading(false);
     }
@@ -784,24 +820,20 @@ export default function Home() {
             </div>
           )}
 
+          {/* FORM & CHAT UI */}
           {calcMode === 'ai-chat' && (
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-stretch animate-fadeIn">
-
-              <div className="lg:col-span-6 space-y-6 bg-zinc-900/30 border border-emerald-500/20 p-6 md:p-8 rounded-2xl backdrop-blur-sm flex flex-col justify-between">
-
-                <form onSubmit={handleGenerateFromForm} className="space-y-4 border-b border-emerald-500/20 pb-6">
-                  <div className="space-y-1">
-                    <span className="text-[10px] tracking-[0.3em] text-emerald-400 font-mono uppercase block">Cách 1: Tùy Chọn Nhanh Cố Định</span>
-                    <h3 className="text-base font-bold text-white uppercase">Tạo Phối Cảnh & Bóc Giá AI</h3>
+              
+              {/* CỘT TRÁI: CHỈ DÀNH CHO FORM NHANH */}
+              <div className="lg:col-span-5 space-y-6 bg-zinc-900/30 border border-emerald-500/20 p-6 md:p-8 rounded-2xl backdrop-blur-sm flex flex-col justify-between">
+                <form onSubmit={handleGenerateFromForm} className="space-y-4">
+                  <div className="space-y-1 border-b border-emerald-500/20 pb-4">
+                    <span className="text-[10px] tracking-[0.3em] text-emerald-400 font-mono uppercase block">Form Nhanh (Dành cho Pro)</span>
+                    <h3 className="text-base font-bold text-white uppercase">Tạo Phối Cảnh & Bóc Giá</h3>
                   </div>
-
                   <div className="space-y-1.5">
-                    <label className="text-[11px] tracking-wider uppercase font-semibold text-gray-400 block">1. Loại hình công trình mong muốn</label>
-                    <select
-                      value={aiSpaceType}
-                      onChange={(e) => setAiSpaceType(e.target.value)}
-                      className="w-full bg-black/50 border border-emerald-500/30 rounded-xl px-3 py-2.5 text-xs text-white focus:outline-none focus:border-emerald-400 cursor-pointer font-sans"
-                    >
+                    <label className="text-[11px] tracking-wider uppercase font-semibold text-gray-400 block">1. Loại hình công trình</label>
+                    <select value={aiSpaceType} onChange={(e) => setAiSpaceType(e.target.value)} className="w-full bg-black/50 border border-emerald-500/30 rounded-xl px-3 py-2.5 text-xs text-white focus:outline-none focus:border-emerald-400 cursor-pointer font-sans">
                       <option value="Nhà Ở Dân Dụng / Nhà Phố" className="bg-neutral-900 text-white">Nhà Ở Dân Dụng / Nhà Phố</option>
                       <option value="Biệt Thự Cao Cấp" className="bg-neutral-900 text-white">Biệt Thự Cao Cấp / Villa</option>
                       <option value="Quán Kafe & Trà Sữa" className="bg-neutral-900 text-white">Quán Kafe & Trà Sữa F&B</option>
@@ -809,158 +841,76 @@ export default function Home() {
                       <option value="Bar & Bistro Thượng Lưu" className="bg-neutral-900 text-white">Bar & Bistro Thượng Lưu</option>
                     </select>
                   </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-1.5">
-                      <label className="text-[11px] tracking-wider uppercase font-semibold text-gray-400 block">2. Phong cách kiến trúc</label>
-                      <select
-                        value={aiStyle}
-                        onChange={(e) => setAiStyle(e.target.value)}
-                        className="w-full bg-black/50 border border-emerald-500/30 rounded-xl px-3 py-2.5 text-xs text-white focus:outline-none focus:border-emerald-400 cursor-pointer font-sans"
-                      >
-                        <option value="Industrial" className="bg-neutral-900 text-white">Industrial (Xi măng, Thép)</option>
-                        <option value="Minimalism" className="bg-neutral-900 text-white">Minimalism (Tối giản)</option>
-                        <option value="Japandi" className="bg-neutral-900 text-white">Japandi (Gỗ ấm cúng)</option>
-                        <option value="Modern Classic" className="bg-neutral-900 text-white">Modern Classic (Tân cổ điển)</option>
-                        <option value="Tropical Eco" className="bg-neutral-900 text-white">Tropical Eco (Cảnh quan xanh)</option>
+                      <label className="text-[11px] tracking-wider uppercase font-semibold text-gray-400 block">2. Phong cách</label>
+                      <select value={aiStyle} onChange={(e) => setAiStyle(e.target.value)} className="w-full bg-black/50 border border-emerald-500/30 rounded-xl px-3 py-2.5 text-xs text-white focus:outline-none focus:border-emerald-400 cursor-pointer font-sans">
+                        <option value="Industrial" className="bg-neutral-900 text-white">Industrial</option>
+                        <option value="Minimalism" className="bg-neutral-900 text-white">Minimalism</option>
+                        <option value="Japandi" className="bg-neutral-900 text-white">Japandi</option>
+                        <option value="Modern Classic" className="bg-neutral-900 text-white">Modern Classic</option>
+                        <option value="Tropical Eco" className="bg-neutral-900 text-white">Tropical Eco</option>
                       </select>
                     </div>
-
                     <div className="space-y-1.5">
                       <label className="text-[11px] tracking-wider uppercase font-semibold text-gray-400 block">3. Diện tích m²</label>
-                      <input
-                        type="number"
-                        value={aiArea}
-                        min="20"
-                        max="2000"
-                        onChange={(e) => setAiArea(parseFloat(e.target.value) || 0)}
-                        className="w-full bg-black/50 border border-emerald-500/30 rounded-xl px-4 py-2 text-white font-medium text-sm focus:outline-none focus:border-emerald-400 font-mono"
-                      />
+                      <input type="number" value={aiArea} onChange={(e) => setAiArea(parseFloat(e.target.value) || 0)} className="w-full bg-black/50 border border-emerald-500/30 rounded-xl px-4 py-2 text-white font-medium text-sm focus:outline-none focus:border-emerald-400 font-mono" />
                     </div>
                   </div>
-
-                  <button
-                    type="submit"
-                    disabled={aiLoading}
-                    className="w-full bg-emerald-500 hover:bg-emerald-400 text-black py-3 px-4 rounded-xl text-xs font-bold uppercase tracking-wider transition-all cursor-pointer border-none outline-none disabled:opacity-50"
-                  >
+                  <button type="submit" disabled={aiLoading} className="w-full mt-4 bg-emerald-500 hover:bg-emerald-400 text-black py-3 px-4 rounded-xl text-xs font-bold uppercase tracking-wider transition-all cursor-pointer border-none outline-none disabled:opacity-50">
                     {aiLoading ? 'AI Đang Render 8K...' : 'Tạo Phối Cảnh & Dự Toán'}
                   </button>
                 </form>
+              </div>
 
-                <div className="space-y-3 pt-2">
-                  <span className="text-[10px] tracking-[0.3em] text-emerald-400 font-mono uppercase block">Cách 2: Trò Chuyện Trực Tiếp Cùng KTS AI</span>
+              {/* CỘT PHẢI: KHUNG CHAT TỰ DO */}
+              <div className="lg:col-span-7 bg-white text-black rounded-2xl shadow-2xl flex flex-col h-[500px] relative overflow-hidden">
+                <div className="p-4 border-b border-neutral-200 text-center bg-neutral-50 flex justify-between items-center px-6">
+                  <div className="text-left">
+                    <span className="text-[9px] uppercase tracking-[0.25em] text-emerald-600 font-bold font-mono block">Trợ Lý AI MAC Concept</span>
+                    <h4 className="text-sm font-bold uppercase">Trò Chuyện Trực Tiếp</h4>
+                  </div>
+                  <span className="text-[10px] tracking-widest uppercase font-bold px-3 py-1.5 rounded-full border text-emerald-600 border-emerald-500/30 bg-emerald-500/5">
+                    {isPro() ? 'Gói Pro' : 'Gói Free'}
+                  </span>
+                </div>
+
+                <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-white">
+                  {chatMessages.length === 0 ? (
+                    <div className="w-full h-full flex flex-col items-center justify-center text-center space-y-3">
+                      <h4 className="text-xs font-bold uppercase tracking-wider text-neutral-700">Xin chào! Tôi là KTS AI</h4>
+                      <p className="text-[11px] text-neutral-400 font-light max-w-xs">Tôi có thể tư vấn thiết kế, bóc tách dự toán hoặc trò chuyện cùng bạn. Hãy gõ gì đó bên dưới nhé!</p>
+                    </div>
+                  ) : (
+                    chatMessages.map((msg, idx) => (
+                      <div key={idx} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                        <div className={`max-w-[80%] rounded-2xl px-4 py-2 text-sm ${msg.role === 'user' ? 'bg-emerald-500 text-black rounded-tr-sm' : 'bg-neutral-100 text-neutral-800 border border-neutral-200 rounded-tl-sm'}`}>
+                          <p className="whitespace-pre-wrap">{msg.text}</p>
+                          {msg.image && (
+                            <div className="mt-2 w-full aspect-video rounded-lg overflow-hidden border border-neutral-300">
+                              <img src={msg.image} alt="AI Render" className="w-full h-full object-cover" />
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ))
+                  )}
+                  {aiLoading && (
+                    <div className="flex justify-start">
+                      <div className="bg-neutral-100 border border-neutral-200 text-neutral-500 rounded-2xl rounded-tl-sm px-4 py-2 text-xs flex items-center gap-2">
+                        <div className="w-3 h-3 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin"></div>Đang trả lời...
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <div className="p-3 border-t border-neutral-200 bg-neutral-50">
                   <form onSubmit={handleSendChat} className="flex gap-2">
-                    <input
-                      type="text"
-                      value={chatInput}
-                      onChange={(e) => setChatInput(e.target.value)}
-                      placeholder="Gõ ý tưởng: 'làm nhà ở 200m2', 'design a cafe 100m2'..."
-                      className="flex-1 bg-black/60 border border-emerald-500/30 rounded-xl px-4 py-3 text-xs text-white focus:outline-none focus:border-emerald-400 font-sans"
-                    />
-                    <button
-                      type="submit"
-                      disabled={aiLoading || !chatInput.trim()}
-                      className="bg-emerald-400 hover:bg-emerald-300 text-black px-5 py-3 rounded-xl text-xs font-bold uppercase tracking-wider transition-all disabled:opacity-40 cursor-pointer outline-none border-none shrink-0"
-                    >
-                      Gửi Chat
-                    </button>
+                    <input type="text" value={chatInput} onChange={(e) => setChatInput(e.target.value)} placeholder="Tán gẫu hoặc yêu cầu thiết kế..." className="flex-1 bg-white border border-neutral-300 rounded-xl px-4 py-2 text-sm text-black focus:outline-none focus:border-emerald-500" />
+                    <button type="submit" disabled={aiLoading || !chatInput.trim()} className="bg-emerald-500 hover:bg-emerald-400 text-black px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition-all disabled:opacity-50">Gửi</button>
                   </form>
                 </div>
               </div>
-
-              <div className="lg:col-span-6 bg-white text-black p-6 md:p-8 rounded-2xl shadow-2xl flex flex-col justify-between relative overflow-hidden space-y-6">
-
-                {aiLoading ? (
-                  <div className="w-full h-full min-h-[380px] flex flex-col items-center justify-center space-y-4 py-12">
-                    <div className="w-12 h-12 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin"></div>
-                    <p className="text-xs font-mono uppercase tracking-widest text-neutral-500">KTS AI đang phân tích & render 3D FLUX 8K...</p>
-                  </div>
-                ) : aiResult ? (
-                  <div className="space-y-4 animate-fadeIn">
-                    <div className="text-center pb-2 border-b border-dashed border-neutral-300">
-                      <span className="text-[9px] uppercase tracking-[0.25em] text-emerald-600 font-bold font-mono block">AI Consultant & Render Result</span>
-                      <h4 className="text-sm font-bold uppercase">{aiResult.spaceType} - {aiResult.style}</h4>
-                    </div>
-
-                    {!aiResult.isPureChat && aiResult.aiImageUrl && (
-                      <div className="w-full aspect-video rounded-xl border border-neutral-200 overflow-hidden shadow-inner relative group bg-neutral-100">
-                        <img 
-                          src={aiResult.aiImageUrl} 
-                          alt="AI Visual Result" 
-                          className="w-full h-full object-cover block animate-[fadeIn_0.5s_ease-in-out]" 
-                        />
-                        <span className="absolute bottom-2 right-2 bg-black/80 backdrop-blur-md text-emerald-400 text-[9px] font-mono px-2 py-1 rounded shadow-lg">
-                          AI Render 2K
-                        </span>
-                      </div>
-                    )}
-
-                    <p className="text-[11px] text-neutral-700 font-light leading-relaxed bg-neutral-50 p-3 rounded-lg border border-neutral-200">
-                      "{aiResult.replyText}"
-                    </p>
-
-                    {aiResult.remaining !== undefined && (
-                      <div className="text-[10px] text-neutral-400 font-mono text-right">
-                        Lượt còn lại hôm nay: {aiResult.remaining} / {aiResult.tier}
-                      </div>
-                    )}
-
-                    {!aiResult.isPureChat && (
-                      <>
-                        <div className="space-y-2 text-xs border-b border-dashed border-neutral-300 pb-3">
-                          <div className="flex justify-between">
-                            <span className="text-neutral-500">Diện tích hạch toán:</span>
-                            <span className="font-bold font-mono">{aiResult.area} m²</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-neutral-500">Đơn giá AI định biên:</span>
-                            <span className="font-medium font-mono">{formatVND(aiResult.basePricePerM2)} / m²</span>
-                          </div>
-                        </div>
-
-                        <div className="space-y-1.5 text-xs text-neutral-600 border-b border-dashed border-neutral-300 pb-3">
-                          <div className="flex justify-between">
-                            <span>Chi phí cơ sở:</span>
-                            <span className="font-mono">{formatVND(aiResult.baseCost)}</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span>Dự phòng BOQ (5%):</span>
-                            <span className="font-mono">{formatVND(aiResult.boqCost)}</span>
-                          </div>
-                        </div>
-
-                        <div className="pt-1">
-                          <div className="flex justify-between items-baseline">
-                            <span className="text-xs font-bold text-neutral-800 uppercase">Tổng dự toán AI:</span>
-                            <span className="text-xl font-bold font-mono tracking-tight text-neutral-950">{formatVND(aiResult.totalCost)}</span>
-                          </div>
-                        </div>
-                      </>
-                    )}
-                  </div>
-                ) : (
-                  <div className="w-full h-full min-h-[380px] flex flex-col items-center justify-center text-center p-8 border-2 border-dashed border-neutral-200 rounded-xl space-y-3">
-                    <h4 className="text-xs font-bold uppercase tracking-wider text-neutral-700">Trạm Phối Cảnh & Trò Chuyện KTS AI</h4>
-                    <p className="text-[11px] text-neutral-400 font-light max-w-xs">
-                      Bạn có thể chọn Form nhanh ở trên hoặc trò chuyện bằng bất kỳ ngôn ngữ nào ở dưới, KTS AI sẽ trả lời và phác thảo phối cảnh 8K ngay!
-                    </p>
-                  </div>
-                )}
-
-                <div className="pt-3 border-t border-neutral-200">
-                  <a
-                    href="https://zalo.me/0375075975"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="w-full bg-neutral-900 hover:bg-black text-white text-center py-3.5 px-4 rounded-xl text-xs font-bold uppercase tracking-widest transition-all duration-300 shadow-md flex items-center justify-center gap-2 cursor-pointer text-decoration-none"
-                  >
-                    <span>Nhận Bản Vẽ Chi Tiết Qua Zalo</span>
-                  </a>
-                </div>
-
-              </div>
-
             </div>
           )}
 
@@ -969,21 +919,18 @@ export default function Home() {
 
       <footer id="contact" className="bg-black py-20 px-6 md:px-16 border-t border-white/5 w-full text-left">
         <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-4 gap-12 text-sm text-gray-500 font-light leading-relaxed">
-
           <div className="space-y-4">
             <h3 className="text-2xl font-bold text-white tracking-widest">MAC</h3>
             <p>44 Nguyễn Văn Dung, Phường 6, Gò Vấp, TP. Hồ Chí Minh</p>
             <p>Điện thoại: 0375075975</p>
             <p>Email: maconcept.asia@gmail.com</p>
           </div>
-
           <div className="space-y-3">
             <h4 className="text-white font-semibold tracking-wider uppercase mb-2">Dịch Vụ Chính</h4>
             <p>- Thiết kế & Thi công kiến trúc chuyên sâu F&B</p>
             <p>- Thiết kế biệt thự nhà vườn cao cấp</p>
             <p>- Thiết kế cảnh quan tích hợp hồ cá Koi nghệ thuật</p>
           </div>
-
           <div className="space-y-3">
             <h4 className="text-white font-semibold tracking-wider uppercase mb-2">Mạng Xã Hội</h4>
             <div className="flex flex-col gap-2.5 text-xs text-gray-400 font-light">
@@ -992,23 +939,15 @@ export default function Home() {
               <a href="https://zalo.me/0375075975" target="_blank" rel="noreferrer" className="hover:text-white transition-colors">Zalo Official CSKH</a>
             </div>
           </div>
-
           <div className="space-y-5">
             <h4 className="text-white font-semibold tracking-wider uppercase">Yêu Cầu Báo Giá</h4>
             <p>Hotline tư vấn kỹ thuật trực tiếp: <strong className="text-white text-base">0375075975</strong></p>
-            <a
-              href="https://zalo.me/0375075975"
-              target="_blank"
-              rel="noreferrer"
-              className="block bg-white text-black font-bold text-center uppercase tracking-widest text-xs px-6 py-4 rounded-xl w-full hover:bg-gray-200 transition-all leading-none cursor-pointer"
-            >
+            <a href="https://zalo.me/0375075975" target="_blank" rel="noreferrer" className="block bg-white text-black font-bold text-center uppercase tracking-widest text-xs px-6 py-4 rounded-xl w-full hover:bg-gray-200 transition-all leading-none cursor-pointer">
               Kết nối nhận tư vấn trực tiếp
             </a>
           </div>
-
         </div>
       </footer>
-
     </div>
   );
 }

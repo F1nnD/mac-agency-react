@@ -11,6 +11,7 @@ const path = require('path');
 const mongoose = require('mongoose');
 const connectDB = require('./src/config/db');
 const settingsRoutes = require('./src/routes/settingsRoutes');
+
 // ===== MIDDLEWARE AUTH =====
 const {
   optionalAuth,
@@ -48,7 +49,7 @@ dotenv.config();
 const app = express();
 
 // =============================================================
-// 1. CẤU HÌNH CORS (PHẢI NẰM TRÊN CÙNG)
+// 1. CẤU HÌNH CORS
 // =============================================================
 const allowedOrigins = (process.env.CORS_ORIGINS || 'http://localhost:5173,http://localhost:3000,http://localhost:5174')
   .split(',')
@@ -76,6 +77,7 @@ app.use(helmet({ crossOriginResourcePolicy: false }));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ limit: '10mb', extended: true }));
 app.use('/api/settings', settingsRoutes);
+
 // =============================================================
 // 3. RATE LIMIT
 // =============================================================
@@ -99,7 +101,7 @@ app.use('/api/auth/login', loginLimiter);
 
 const aiLimiter = rateLimit({
   windowMs: 60 * 1000,
-  max: 10,
+  max: 15,
   standardHeaders: true,
   legacyHeaders: false,
   message: { success: false, message: 'Bạn đã gọi AI quá nhanh. Vui lòng chờ 1 phút.' }
@@ -108,7 +110,7 @@ app.use('/api/ai-consult-free', aiLimiter);
 app.use('/api/ai-consult-pro', aiLimiter);
 
 // =============================================================
-// 4. MOUNT ROUTES (SAU KHI ĐÃ QUA CORS VÀ JSON)
+// 4. MOUNT ROUTES
 // =============================================================
 app.use('/api/projects', projectRoutes);
 app.use('/api/packages', packageRoutes);
@@ -267,7 +269,7 @@ app.delete('/api/drafts/:id', async (req, res) => {
 });
 
 // =============================================================
-// AI CONSULT — FREE
+// AI CONSULT — FREE (Chatbot tư vấn tự do)
 // =============================================================
 app.post(
   '/api/ai-consult-free',
@@ -275,7 +277,7 @@ app.post(
   checkAIQuota,
   async (req, res) => {
     try {
-      const { userMessage } = req.body;
+      const { userMessage, chatHistory } = req.body;
 
       if (!userMessage || !userMessage.trim()) {
         return res.status(400).json({ success: false, message: 'Vui lòng nhập câu hỏi.' });
@@ -286,38 +288,35 @@ app.post(
 
       if (apiKey) {
         try {
-          const currentDate = new Date().toLocaleDateString('vi-VN', {
-            weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
-          });
+          const currentDate = new Date().toLocaleDateString('vi-VN');
+          
+          // System Prompt thông minh cho AI Free
+          const systemPrompt = `Bạn là Chuyên gia Tư vấn Kiến trúc của MAC Concept. Hôm nay là: ${currentDate}.
+Hãy trả lời tự nhiên, thân thiện, vui vẻ như một người bạn. Không trả lời máy móc.`;
 
-          const systemPrompt = `You are a Senior Architect AI at MAC Concept. You can chat freely in ANY language about ANY topic.
-Today's Date: ${currentDate}.
-Analyze the user's message intent and return ONLY a valid JSON without markdown formatting:
-{
-  "replyText": string,
-  "topic": string
-}`;
+          let contents = [];
+          if (chatHistory && Array.isArray(chatHistory)) {
+            chatHistory.slice(-5).forEach(msg => {
+              contents.push({ role: msg.role === 'user' ? 'user' : 'model', parts: [{ text: msg.text }] });
+            });
+          }
+          contents.push({ role: 'user', parts: [{ text: userMessage }] });
 
-          const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent`;
-          const headers = { 
-            'Content-Type': 'application/json',
-            'x-goog-api-key': apiKey 
-          };
-
+          const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+          
           const apiRes = await fetch(url, {
             method: 'POST',
-            headers,
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-              contents: [{ parts: [{ text: `${systemPrompt}\n\nUser: "${userMessage}"` }] }]
+              systemInstruction: { parts: [{ text: systemPrompt }] },
+              contents: contents,
+              generationConfig: { temperature: 0.8 }
             })
           });
 
           if (apiRes.ok) {
             const resData = await apiRes.json();
-            const responseText = resData.candidates[0].content.parts[0].text;
-            const rawJson = responseText.replace(/```json/g, '').replace(/```/g, '').trim();
-            const parsed = JSON.parse(rawJson);
-            replyText = parsed.replyText || '';
+            replyText = resData.candidates[0].content.parts[0].text;
           }
         } catch (err) {
           console.log('Lỗi gọi Gemini Free:', err.message);
@@ -325,7 +324,7 @@ Analyze the user's message intent and return ONLY a valid JSON without markdown 
       }
 
       if (!replyText) {
-        replyText = 'Cảm ơn bạn đã chia sẻ. Để được tư vấn sâu hơn, bạn hãy nâng cấp lên gói Pro.';
+        replyText = 'Cảm ơn bạn đã chia sẻ. Hiện tại kết nối AI đang bận, bạn thử lại sau nhé.';
       }
 
       await AIUsage.create({
@@ -354,7 +353,7 @@ Analyze the user's message intent and return ONLY a valid JSON without markdown 
 );
 
 // =============================================================
-// AI CONSULT — PRO
+// AI CONSULT — PRO (Chat + Render)
 // =============================================================
 app.post(
   '/api/ai-consult-pro',
@@ -363,58 +362,92 @@ app.post(
   checkAIQuota,
   async (req, res) => {
     try {
-      const { style: reqStyle, area: reqArea, spaceType: reqSpaceType, userMessage } = req.body;
+      const { style: reqStyle, area: reqArea, spaceType: reqSpaceType, userMessage, chatHistory } = req.body;
 
       let spaceType = reqSpaceType || 'Quán Kafe & Trà Sữa';
       let style = reqStyle || 'Industrial';
       let numArea = Number(reqArea) || 120;
       let replyText = '';
       let spaceTypeEn = 'Coffee Shop';
+      let isArchitectRequest = reqStyle ? true : false; // Mặc định Form gửi lên là muốn vẽ
 
+      // Nếu là Chat, để AI tự phân tích xem có nên vẽ không
       if (userMessage && !reqStyle) {
         const apiKey = process.env.GEMINI_API_KEY;
         if (apiKey) {
           try {
-            const currentDate = new Date().toLocaleDateString('vi-VN', {
-              weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
-            });
+            const systemPrompt = `Bạn là KTS trưởng của MAC Concept.
+Nhiệm vụ: Trò chuyện tự nhiên, vui vẻ. Nếu khách có ý định thiết kế/vẽ (ví dụ: "làm quán cafe", "vẽ nhà", "thiết kế 200m2"), hãy TRÍCH XUẤT thông tin và trả về đúng định dạng JSON:
+{
+  "replyText": "Câu trả lời tự nhiên của bạn",
+  "isArchitectRequest": boolean (true nếu muốn vẽ, false nếu chỉ chat),
+  "spaceTypeVi": "Tên loại công trình",
+  "spaceTypeEn": "English Name",
+  "style": "Phong cách (Industrial, Minimalism,...)",
+  "area": number (diện tích)
+}`;
+            
+            let contents = [];
+            if (chatHistory && Array.isArray(chatHistory)) {
+              chatHistory.slice(-5).forEach(msg => {
+                contents.push({ role: msg.role === 'user' ? 'user' : 'model', parts: [{ text: msg.text }] });
+              });
+            }
+            contents.push({ role: 'user', parts: [{ text: userMessage }] });
 
-            const systemPrompt = `You are a Senior Architect AI at MAC Concept.
-Today's Date: ${currentDate}.
-Return ONLY valid JSON: { "replyText": string, "spaceTypeVi": string, "spaceTypeEn": string, "style": string, "area": number }`;
-
-            const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent`;
-            const headers = { 
-              'Content-Type': 'application/json',
-              'x-goog-api-key': apiKey 
-            };
-
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
             const apiRes = await fetch(url, {
               method: 'POST',
-              headers,
-              body: JSON.stringify({
-                contents: [{ parts: [{ text: `${systemPrompt}\n\nUser: "${userMessage}"` }] }]
-              })
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ systemInstruction: { parts: [{ text: systemPrompt }] }, contents: contents })
             });
 
             if (apiRes.ok) {
               const resData = await apiRes.json();
-              const text = resData.candidates[0].content.parts[0].text;
-              const parsed = JSON.parse(text.replace(/```json/g, '').replace(/```/g, '').trim());
-              spaceType = parsed.spaceTypeVi || spaceType;
-              spaceTypeEn = parsed.spaceTypeEn || spaceTypeEn;
-              style = parsed.style || style;
-              numArea = parsed.area || numArea;
-              replyText = parsed.replyText || '';
+              let text = resData.candidates[0].content.parts[0].text;
+              
+              try {
+                const parsed = JSON.parse(text.replace(/```json/g, '').replace(/```/g, '').trim());
+                replyText = parsed.replyText;
+                isArchitectRequest = parsed.isArchitectRequest;
+                if (parsed.spaceTypeVi) spaceType = parsed.spaceTypeVi;
+                if (parsed.spaceTypeEn) spaceTypeEn = parsed.spaceTypeEn;
+                if (parsed.style) style = parsed.style;
+                if (parsed.area) numArea = parsed.area;
+              } catch (e) {
+                replyText = text;
+                isArchitectRequest = false;
+              }
             }
-          } catch (err) {}
+          } catch (err) { console.log('Lỗi gọi Gemini Pro Chat:', err.message); }
         }
       }
 
       if (!replyText) {
-        replyText = `Phương án thiết kế ${spaceType} phong cách ${style} quy mô ${numArea}m² đã hoàn thành phác thảo phối cảnh AI 8K.`;
+        replyText = `Dạ, tôi đã ghi nhận yêu cầu.`;
       }
 
+      // Nếu không phải yêu cầu vẽ -> Trả về chat bình thường
+      if (!isArchitectRequest) {
+        await AIUsage.create({
+          userId: req.user?.userId || null,
+          tier: req.aiTier,
+          endpoint: '/api/ai-consult-pro',
+          requestType: 'chat',
+          userMessage: userMessage?.substring(0, 500),
+          success: true,
+        }).catch(() => {});
+
+        return res.json({
+          success: true,
+          tier: req.aiTier,
+          remaining: req.aiRemaining,
+          replyText,
+          isPureChat: true
+        });
+      }
+
+      // Nếu là yêu cầu vẽ -> Tính toán và render
       let basePricePerM2 = 380000;
       if (spaceType.includes('Nhà Ở') || spaceType.includes('Residential')) basePricePerM2 = 350000;
       if (spaceType.includes('Biệt Thự') || spaceType.includes('Villa')) basePricePerM2 = 480000;
@@ -425,18 +458,17 @@ Return ONLY valid JSON: { "replyText": string, "spaceTypeVi": string, "spaceType
       const boqCost = baseCost * 0.05;
       const totalCost = baseCost + boqCost;
 
-            // NÂNG CẤP: Render ảnh 2K chất lượng cao
-            const promptText = `photorealistic 8k architectural visualization, interior design rendering of a ${spaceTypeEn}, ${style} style, ${numArea} square meters, professional architectural photography, cinematic warm lighting, high end materials, ray tracing, ultra detailed, masterpiece`;
-            const aiImageUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(promptText)}?model=flux-realism&width=2048&height=1152&nologo=true&seed=${Math.floor(Math.random() * 900000 + 100000)}`;
+      const promptText = `photorealistic 8k architectural visualization, interior design rendering of a ${spaceTypeEn}, ${style} style, ${numArea} square meters, professional architectural photography, cinematic warm lighting, high end materials, ray tracing, ultra detailed, masterpiece`;
+      const aiImageUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(promptText)}?model=flux-realism&width=2048&height=1152&nologo=true&seed=${Math.floor(Math.random() * 900000 + 100000)}`;
+
       await AIUsage.create({
         userId: req.user?.userId || null,
         tier: req.aiTier,
         endpoint: '/api/ai-consult-pro',
-        requestType: userMessage ? 'chat' : 'form',
-        userMessage: (userMessage || '').substring(0, 500),
+        requestType: 'render',
+        userMessage: userMessage?.substring(0, 500),
         generatedImage: true,
         success: true,
-        ipAddress: req.ip || ''
       }).catch(() => {});
 
       return res.json({
