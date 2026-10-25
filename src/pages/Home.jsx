@@ -4,7 +4,7 @@ import gsap from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import { ScrollToPlugin } from 'gsap/ScrollToPlugin';
 import Header from '../components/Header';
-import { askAI, isPro } from '../utils/apiClient';
+import { askFreeAI, askProAI, isPro } from '../utils/apiClient';
 
 gsap.registerPlugin(ScrollTrigger, ScrollToPlugin);
 
@@ -176,11 +176,11 @@ export default function Home() {
     setAiResult(null);
 
     try {
-      const data = await askAI({
+      // Gọi hàm askProAI đã được cập nhật
+      const data = await askProAI({
         style: aiStyle,
         area: aiArea,
-        spaceType: aiSpaceType,
-        usePro: true
+        spaceType: aiSpaceType
       });
       setAiResult(data);
       
@@ -192,7 +192,11 @@ export default function Home() {
       ]);
     } catch (err) {
       console.error('Lỗi AI Form:', err);
-      alert(err.message || 'Không thể kết nối AI. Vui lòng thử lại.');
+      if (err.message.includes('nâng cấp') || err.message.includes('429')) {
+        alert(err.message);
+      } else {
+        alert(err.message || 'Không thể kết nối AI. Vui lòng thử lại.');
+      }
     } finally {
       setAiLoading(false);
     }
@@ -212,13 +216,12 @@ export default function Home() {
     setChatMessages(updatedHistory);
 
     try {
-      const useProEndpoint = isPro();
-      const data = await askAI({
-        userMessage: msg,
-        chatHistory: chatMessages,
-        usePro: useProEndpoint
-        // Đã bỏ style, area, spaceType để AI tự do tán gẫu
-      });
+      const isUserPro = isPro();
+      
+      // Gọi API phân tầng
+      const data = isUserPro 
+        ? await askProAI({ userMessage: msg, chatHistory: chatMessages })
+        : await askFreeAI({ userMessage: msg, chatHistory: chatMessages });
       
       setChatMessages([
         ...updatedHistory, 
@@ -231,10 +234,19 @@ export default function Home() {
       
     } catch (err) {
       console.error('Lỗi AI Chat:', err);
-      setChatMessages([
-        ...updatedHistory, 
-        { role: 'ai', text: 'Lỗi kết nối đến AI. Vui lòng thử lại.' }
-      ]);
+      
+      // Bắt lỗi hết Quota (429)
+      if (err.message.includes('nâng cấp') || err.message.includes('429')) {
+        setChatMessages([
+          ...updatedHistory, 
+          { role: 'ai', text: err.message, isUpgradePrompt: true }
+        ]);
+      } else {
+        setChatMessages([
+          ...updatedHistory, 
+          { role: 'ai', text: 'Lỗi kết nối đến AI. Vui lòng thử lại.' }
+        ]);
+      }
     } finally {
       setAiLoading(false);
     }
@@ -886,15 +898,28 @@ export default function Home() {
                       <div key={idx} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                         <div className={`max-w-[80%] rounded-2xl px-4 py-2 text-sm ${msg.role === 'user' ? 'bg-emerald-500 text-black rounded-tr-sm' : 'bg-neutral-100 text-neutral-800 border border-neutral-200 rounded-tl-sm'}`}>
                           <p className="whitespace-pre-wrap">{msg.text}</p>
+                          
+                          {/* Hiển thị ảnh nếu có */}
                           {msg.image && (
                             <div className="mt-2 w-full aspect-video rounded-lg overflow-hidden border border-neutral-300">
                               <img src={msg.image} alt="AI Render" className="w-full h-full object-cover" />
                             </div>
                           )}
+
+                          {/* Nút nâng cấp nếu hết quota */}
+                          {msg.isUpgradePrompt && (
+                            <button 
+                              onClick={() => navigate('/pricing')}
+                              className="mt-3 bg-amber-400 hover:bg-amber-300 text-black px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-wider transition-all w-full"
+                            >
+                              Nâng cấp Pro ngay
+                            </button>
+                          )}
                         </div>
                       </div>
                     ))
                   )}
+                  
                   {aiLoading && (
                     <div className="flex justify-start">
                       <div className="bg-neutral-100 border border-neutral-200 text-neutral-500 rounded-2xl rounded-tl-sm px-4 py-2 text-xs flex items-center gap-2">

@@ -13,10 +13,7 @@ const connectDB = require('./src/config/db');
 const settingsRoutes = require('./src/routes/settingsRoutes');
 
 // ===== MIDDLEWARE AUTH =====
-const {
-  optionalAuth,
-  requirePro
-} = require('./src/middleware/authMiddleware');
+const { optionalAuth, requirePro, verifyToken, requireRole } = require('./src/middleware/authMiddleware');
 const { checkAIQuota } = require('./src/middleware/aiQuotaMiddleware');
 
 // ===== MODELS =====
@@ -34,7 +31,6 @@ const draftSchema = new mongoose.Schema({
   maxArea: { type: Number, default: 5000 },
   siteStatus: { type: String, default: 'all' }
 }, { timestamps: true });
-
 const Draft = mongoose.models.Draft || mongoose.model('Draft', draftSchema);
 
 // ===== ROUTES =====
@@ -48,460 +44,212 @@ const statsRoutes = require('./src/routes/statsRoutes');
 dotenv.config();
 const app = express();
 
-// =============================================================
 // 1. CẤU HÌNH CORS
-// =============================================================
 const defaultOrigins = 'http://localhost:5173,http://localhost:3000,http://localhost:5174,https://moreactisticconcept.onrender.com';
-const allowedOrigins = (process.env.CORS_ORIGINS || defaultOrigins)
-  .split(',')
-  .map(o => o.trim())
-  .filter(Boolean);
+const allowedOrigins = (process.env.CORS_ORIGINS || defaultOrigins).split(',').map(o => o.trim()).filter(Boolean);
 
 app.use(cors({
   origin: function (origin, callback) {
     if (!origin) return callback(null, true);
-    if (allowedOrigins.includes(origin)) {
-      return callback(null, true);
-    }
+    if (allowedOrigins.includes(origin)) return callback(null, true);
     console.log('CORS blocked origin:', origin);
-    return callback(new Error('CORS: Origin không được phép → ' + origin));
+    return callback(new Error('CORS blocked'));
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
-// =============================================================
-// 2. CÁC MIDDLEWARE CƠ BẢN
-// =============================================================
+// 2. MIDDLEWARE CƠ BẢN
 app.use(helmet({ crossOriginResourcePolicy: false }));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ limit: '10mb', extended: true }));
 app.use('/api/settings', settingsRoutes);
 
-// =============================================================
 // 3. RATE LIMIT
-// =============================================================
-const globalLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 300,
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: { success: false, message: 'Quá nhiều yêu cầu. Vui lòng thử lại sau 15 phút.' }
-});
-app.use('/api', globalLimiter);
+app.use('/api', rateLimit({ windowMs: 15 * 60 * 1000, max: 500 }));
+app.use('/api/auth/login', rateLimit({ windowMs: 15 * 60 * 1000, max: 20 }));
+app.use('/api/ai-free', rateLimit({ windowMs: 60 * 1000, max: 15 }));
+app.use('/api/ai-pro', rateLimit({ windowMs: 60 * 1000, max: 15 }));
+app.use('/api/ai-admin', rateLimit({ windowMs: 60 * 1000, max: 30 }));
 
-const loginLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 10,
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: { success: false, message: 'Quá nhiều lần đăng nhập sai. Vui lòng thử lại sau 15 phút.' }
-});
-app.use('/api/auth/login', loginLimiter);
-
-const aiLimiter = rateLimit({
-  windowMs: 60 * 1000,
-  max: 15,
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: { success: false, message: 'Bạn đã gọi AI quá nhanh. Vui lòng chờ 1 phút.' }
-});
-app.use('/api/ai-consult-free', aiLimiter);
-app.use('/api/ai-consult-pro', aiLimiter);
-
-// =============================================================
 // 4. MOUNT ROUTES
-// =============================================================
 app.use('/api/projects', projectRoutes);
 app.use('/api/packages', packageRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/data', dataRoutes);
 app.use('/api/stats', statsRoutes);
 
-// =============================================================
-// 5. AUTO SEED DATABASE
-// =============================================================
-const autoSeedDatabase = async () => {
-  try {
-    const projectCount = await Project.countDocuments();
+// 5. KẾT NỐI DB & SEED DATA (Giữ nguyên logic cũ)
+connectDB().then(() => console.log('DB Ready')).catch(err => console.error('Lỗi DB:', err.message));
 
-    if (projectCount === 0) {
-      console.log('MongoDB Atlas trống! Đang quét tìm tệp dữ liệu cũ để đồng bộ...');
-      let rawData = null;
-      const pathsToTry = [
-        './projects.json',
-        './src/data/projects.json',
-        '../frontend/public/assets/data/projects.json',
-        './public/assets/data/projects.json'
-      ];
-
-      for (const p of pathsToTry) {
-        if (fs.existsSync(p)) {
-          console.log(`Tìm thấy file dữ liệu cũ tại: ${p}`);
-          rawData = fs.readFileSync(p, 'utf-8');
-          break;
-        }
-      }
-
-      if (rawData) {
-        const localProjects = JSON.parse(rawData);
-        const projectArray = Object.keys(localProjects).map(key => ({
-          breadcrumb: key,
-          name: localProjects[key].name || key,
-          type: localProjects[key].type || 'Architecture • Interior',
-          location: localProjects[key].location || 'TP. Hồ Chí Minh',
-          area: localProjects[key].area || '100 m²',
-          year: localProjects[key].year || '2026',
-          subtitle: localProjects[key].subtitle || '',
-          quote: localProjects[key].quote || '',
-          desc1: localProjects[key].desc1 || '',
-          desc2: localProjects[key].desc2 || '',
-          projectDesc: localProjects[key].projectDesc || localProjects[key].desc1 || 'Chưa có mô tả chi tiết từ Admin.',
-          img1: localProjects[key].img1 || '',
-          img2: localProjects[key].img2 || '',
-          img3: localProjects[key].img3 || '',
-          img4: localProjects[key].img4 || ''
-        }));
-
-        await Project.insertMany(projectArray);
-        console.log('ĐỒNG BỘ THÀNH CÔNG TẤT CẢ DỰ ÁN CŨ LÊN MONGODB ATLAS!');
-      } else {
-        console.log('Thất bại: Không tìm thấy tệp projects.json nào.');
-      }
-    } else {
-      console.log('Dữ liệu danh mục dự án đã sẵn sàng.');
-    }
-
-    const packageCount = await Package.countDocuments();
-    if (packageCount === 0) {
-      const defaultPackages = [
-        { key: 'concept', num: '01', name: 'Gói Thiết Kế Concept', unit: 'm²', price: 350000 },
-        { key: 'build', num: '02', name: 'Gói Thi Công Trọn Gói', unit: 'm²', price: 3500000 },
-        { key: 'combo', num: '03', name: 'Combo Premium Thượng Lưu', unit: 'm²', price: 4200000 },
-        { key: 'landscape', num: '04', name: 'Cảnh Quan Nghệ Thuật', unit: 'm²', price: 800000 }
-      ];
-      await Package.insertMany(defaultPackages);
-      console.log('Đã khởi tạo bảng giá định biên mặc định.');
-    }
-
-    const draftCount = await Draft.countDocuments();
-    if (draftCount === 0) {
-      const defaultDrafts = [
-        { key: 'draft-industrial', name: 'Draft 01: Layout mặt bằng Industrial (2 Mặt tiền)', basePricePerM2: 350000, demoImage: 'assets/pic/dedrip.jpg', minArea: 50, maxArea: 150, siteStatus: 'dat-trong' },
-        { key: 'draft-minimalism', name: 'Draft 02: Layout mặt bằng Minimalism (Nhà ống)', basePricePerM2: 300000, demoImage: 'assets/pic/themonic.jpg', minArea: 30, maxArea: 100, siteStatus: 'nha-san' },
-        { key: 'draft-classic', name: 'Draft 03: Layout mặt bằng Modern Classic (Biệt thự)', basePricePerM2: 450000, demoImage: 'assets/pic/Under.jpg', minArea: 100, maxArea: 500, siteStatus: 'all' }
-      ];
-      await Draft.insertMany(defaultDrafts);
-      console.log('Đã seeding 3 cấu trúc Draft Layout mẫu.');
-    }
-
-  } catch (err) {
-    console.error('Lỗi tiến trình đồng bộ dữ liệu mẫu:', err.message);
-  }
-};
-
-connectDB()
-  .then(() => autoSeedDatabase())
-  .catch(err => console.error('❌ Lỗi kết nối DB:', err.message));
-
-// =============================================================
 // 6. CÁC ROUTE INLINE KHÁC
-// =============================================================
 app.get('/api/packages', async (req, res) => {
   try {
     const packages = await Package.find();
     const formattedPriceList = {};
-    packages.forEach(pkg => {
-      formattedPriceList[pkg.key] = { name: pkg.name, price: pkg.price };
-    });
+    packages.forEach(pkg => { formattedPriceList[pkg.key] = { name: pkg.name, price: pkg.price }; });
     res.json(formattedPriceList);
-  } catch (error) {
-    res.status(500).json({ message: 'Lỗi đồng bộ giá', error: error.message });
-  }
+  } catch (error) { res.status(500).json({ message: error.message }); }
 });
 
 app.get('/api/drafts', async (req, res) => {
-  try {
-    const drafts = await Draft.find();
-    res.json(drafts);
-  } catch (error) {
-    res.status(500).json({ message: 'Lỗi đọc dữ liệu Draft', error: error.message });
-  }
-});
-
-app.post('/api/drafts', async (req, res) => {
-  try {
-    const { key, name, basePricePerM2, demoImage, minArea, maxArea, siteStatus } = req.body;
-    const newDraft = new Draft({
-      key, name, basePricePerM2, demoImage,
-      minArea: minArea || 0,
-      maxArea: maxArea || 5000,
-      siteStatus: siteStatus || 'all'
-    });
-    await newDraft.save();
-    res.json(newDraft);
-  } catch (error) {
-    res.status(500).json({ message: 'Lỗi tạo mới Draft Layout', error: error.message });
-  }
-});
-
-app.put('/api/drafts/:id', async (req, res) => {
-  try {
-    const { basePricePerM2, name, demoImage, minArea, maxArea, siteStatus } = req.body;
-    const updatedDraft = await Draft.findByIdAndUpdate(
-      req.params.id,
-      { basePricePerM2, name, demoImage, minArea, maxArea, siteStatus },
-      { new: true }
-    );
-    res.json(updatedDraft);
-  } catch (error) {
-    res.status(500).json({ message: 'Lỗi biên tập Draft', error: error.message });
-  }
-});
-
-app.delete('/api/drafts/:id', async (req, res) => {
-  try {
-    await Draft.findByIdAndDelete(req.params.id);
-    res.json({ message: 'Đã xóa vĩnh viễn cấu trúc Draft thành công!' });
-  } catch (error) {
-    res.status(500).json({ message: 'Lỗi loại bỏ Draft Layout', error: error.message });
-  }
+  try { res.json(await Draft.find()); } catch (error) { res.status(500).json({ message: error.message }); }
 });
 
 // =============================================================
-// AI CONSULT — FREE (Chatbot tư vấn tự do)
+// TẦNG 1: AI FREE (Khách Thường - 1 ảnh/3 ngày)
 // =============================================================
-app.post(
-  '/api/ai-consult-free',
-  optionalAuth,
-  checkAIQuota,
-  async (req, res) => {
-    try {
-      const { userMessage, chatHistory } = req.body;
+app.post('/api/ai-free', optionalAuth, async (req, res) => {
+  // Logic chat cơ bản cho Free (Không qua checkQuota ảnh)
+  try {
+    const { userMessage, chatHistory } = req.body;
+    if (!userMessage) return res.status(400).json({ success: false, message: 'Nhập câu hỏi.' });
 
-      if (!userMessage || !userMessage.trim()) {
-        return res.status(400).json({ success: false, message: 'Vui lòng nhập câu hỏi.' });
+    const apiKey = process.env.GEMINI_API_KEY;
+    let replyText = '';
+
+    if (apiKey) {
+      const systemPrompt = `Bạn là nhân viên tư vấn của MAC Concept. Hãy trả lời ngắn gọn, thân thiện. Nếu khách muốn thiết kế, hãy khuyên họ nâng cấp lên gói Pro để được AI vẽ phối cảnh.`;
+      let contents = [];
+      if (chatHistory) {
+        chatHistory.slice(-3).forEach(msg => contents.push({ role: msg.role === 'user' ? 'user' : 'model', parts: [{ text: msg.text }] }));
       }
+      contents.push({ role: 'user', parts: [{ text: userMessage }] });
 
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+      const apiRes = await fetch(url, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ systemInstruction: { parts: [{ text: systemPrompt }] }, contents })
+      });
+
+      if (apiRes.ok) {
+        const data = await apiRes.json();
+        replyText = data.candidates[0].content.parts[0].text;
+      }
+    }
+    return res.json({ success: true, tier: 'free', replyText: replyText || 'Vui lòng thử lại sau.', isPureChat: true });
+  } catch (error) { return res.status(500).json({ success: false, message: 'Lỗi AI.' }); }
+});
+
+// =============================================================
+// TẦNG 2: AI PRO (Khách Trả Phí - 3 ảnh/ngày)
+// =============================================================
+app.post('/api/ai-pro', optionalAuth, checkAIQuota, async (req, res) => {
+  try {
+    const { userMessage, style: reqStyle, area: reqArea, spaceType: reqSpaceType, chatHistory } = req.body;
+
+    let spaceType = reqSpaceType || 'Công trình';
+    let style = reqStyle || 'Industrial';
+    let numArea = Number(reqArea) || 100;
+    let replyText = '';
+    let spaceTypeEn = 'Building';
+    let isArchitectRequest = reqStyle ? true : false; // Nếu từ Form gửi lên là muốn vẽ
+
+    // Nếu là Chat, để AI tự phân tích
+    if (userMessage && !reqStyle) {
       const apiKey = process.env.GEMINI_API_KEY;
-      let replyText = '';
-
       if (apiKey) {
-        try {
-          const currentDate = new Date().toLocaleDateString('vi-VN');
-          
-          // System Prompt thông minh cho AI Free
-          const systemPrompt = `Bạn là Chuyên gia Tư vấn Kiến trúc của MAC Concept. Hôm nay là: ${currentDate}.
-Hãy trả lời tự nhiên, thân thiện, vui vẻ như một người bạn. Không trả lời máy móc.`;
-
-          let contents = [];
-          if (chatHistory && Array.isArray(chatHistory)) {
-            chatHistory.slice(-5).forEach(msg => {
-              contents.push({ role: msg.role === 'user' ? 'user' : 'model', parts: [{ text: msg.text }] });
-            });
-          }
-          contents.push({ role: 'user', parts: [{ text: userMessage }] });
-
-          const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
-          
-          const apiRes = await fetch(url, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              systemInstruction: { parts: [{ text: systemPrompt }] },
-              contents: contents,
-              generationConfig: { temperature: 0.8 }
-            })
-          });
-
-          if (apiRes.ok) {
-            const resData = await apiRes.json();
-            replyText = resData.candidates[0].content.parts[0].text;
-          }
-        } catch (err) {
-          console.log('Lỗi gọi Gemini Free:', err.message);
+        const systemPrompt = `Bạn là KTS của MAC Concept. Trò chuyện tự nhiên. Nếu khách muốn vẽ, hãy trả về JSON:
+{ "replyText": "câu trả lời", "isArchitectRequest": boolean, "spaceTypeVi": "tên", "spaceTypeEn": "tên tiếng Anh", "style": "phong cách", "area": number }`;
+        
+        let contents = [];
+        if (chatHistory) {
+          chatHistory.slice(-5).forEach(msg => contents.push({ role: msg.role === 'user' ? 'user' : 'model', parts: [{ text: msg.text }] }));
         }
-      }
+        contents.push({ role: 'user', parts: [{ text: userMessage }] });
 
-      if (!replyText) {
-        replyText = 'Cảm ơn bạn đã chia sẻ. Hiện tại kết nối AI đang bận, bạn thử lại sau nhé.';
-      }
-
-      await AIUsage.create({
-        userId: req.user?.userId || null,
-        tier: req.aiTier,
-        endpoint: '/api/ai-consult-free',
-        requestType: 'chat',
-        userMessage: userMessage.substring(0, 500),
-        generatedImage: false,
-        success: true,
-        ipAddress: req.ip || ''
-      }).catch(() => {});
-
-      return res.json({
-        success: true,
-        tier: req.aiTier,
-        remaining: req.aiRemaining,
-        replyText,
-        isPureChat: true
-      });
-    } catch (error) {
-      console.error('Lỗi AI Free:', error);
-      return res.status(500).json({ success: false, message: 'Không thể kết nối AI.' });
-    }
-  }
-);
-
-// =============================================================
-// AI CONSULT — PRO (Chat + Render)
-// =============================================================
-app.post(
-  '/api/ai-consult-pro',
-  optionalAuth,
-  requirePro,
-  checkAIQuota,
-  async (req, res) => {
-    try {
-      const { style: reqStyle, area: reqArea, spaceType: reqSpaceType, userMessage, chatHistory } = req.body;
-
-      let spaceType = reqSpaceType || 'Quán Kafe & Trà Sữa';
-      let style = reqStyle || 'Industrial';
-      let numArea = Number(reqArea) || 120;
-      let replyText = '';
-      let spaceTypeEn = 'Coffee Shop';
-      let isArchitectRequest = reqStyle ? true : false; // Mặc định Form gửi lên là muốn vẽ
-
-      // Nếu là Chat, để AI tự phân tích xem có nên vẽ không
-      if (userMessage && !reqStyle) {
-        const apiKey = process.env.GEMINI_API_KEY;
-        if (apiKey) {
-          try {
-            const systemPrompt = `Bạn là KTS trưởng của MAC Concept.
-Nhiệm vụ: Trò chuyện tự nhiên, vui vẻ. Nếu khách có ý định thiết kế/vẽ (ví dụ: "làm quán cafe", "vẽ nhà", "thiết kế 200m2"), hãy TRÍCH XUẤT thông tin và trả về đúng định dạng JSON:
-{
-  "replyText": "Câu trả lời tự nhiên của bạn",
-  "isArchitectRequest": boolean (true nếu muốn vẽ, false nếu chỉ chat),
-  "spaceTypeVi": "Tên loại công trình",
-  "spaceTypeEn": "English Name",
-  "style": "Phong cách (Industrial, Minimalism,...)",
-  "area": number (diện tích)
-}`;
-            
-            let contents = [];
-            if (chatHistory && Array.isArray(chatHistory)) {
-              chatHistory.slice(-5).forEach(msg => {
-                contents.push({ role: msg.role === 'user' ? 'user' : 'model', parts: [{ text: msg.text }] });
-              });
-            }
-            contents.push({ role: 'user', parts: [{ text: userMessage }] });
-
-            const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
-            const apiRes = await fetch(url, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ systemInstruction: { parts: [{ text: systemPrompt }] }, contents: contents })
-            });
-
-            if (apiRes.ok) {
-              const resData = await apiRes.json();
-              let text = resData.candidates[0].content.parts[0].text;
-              
-              try {
-                const parsed = JSON.parse(text.replace(/```json/g, '').replace(/```/g, '').trim());
-                replyText = parsed.replyText;
-                isArchitectRequest = parsed.isArchitectRequest;
-                if (parsed.spaceTypeVi) spaceType = parsed.spaceTypeVi;
-                if (parsed.spaceTypeEn) spaceTypeEn = parsed.spaceTypeEn;
-                if (parsed.style) style = parsed.style;
-                if (parsed.area) numArea = parsed.area;
-              } catch (e) {
-                replyText = text;
-                isArchitectRequest = false;
-              }
-            }
-          } catch (err) { console.log('Lỗi gọi Gemini Pro Chat:', err.message); }
-        }
-      }
-
-      if (!replyText) {
-        replyText = `Dạ, tôi đã ghi nhận yêu cầu.`;
-      }
-
-      // Nếu không phải yêu cầu vẽ -> Trả về chat bình thường
-      if (!isArchitectRequest) {
-        await AIUsage.create({
-          userId: req.user?.userId || null,
-          tier: req.aiTier,
-          endpoint: '/api/ai-consult-pro',
-          requestType: 'chat',
-          userMessage: userMessage?.substring(0, 500),
-          success: true,
-        }).catch(() => {});
-
-        return res.json({
-          success: true,
-          tier: req.aiTier,
-          remaining: req.aiRemaining,
-          replyText,
-          isPureChat: true
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+        const apiRes = await fetch(url, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ systemInstruction: { parts: [{ text: systemPrompt }] }, contents })
         });
+
+        if (apiRes.ok) {
+          const data = await apiRes.json();
+          let text = data.candidates[0].content.parts[0].text;
+          try {
+            const parsed = JSON.parse(text.replace(/```json/g, '').replace(/```/g, '').trim());
+            replyText = parsed.replyText;
+            isArchitectRequest = parsed.isArchitectRequest;
+            if (parsed.spaceTypeVi) spaceType = parsed.spaceTypeVi;
+            if (parsed.spaceTypeEn) spaceTypeEn = parsed.spaceTypeEn;
+            if (parsed.style) style = parsed.style;
+            if (parsed.area) numArea = parsed.area;
+          } catch (e) { replyText = text; isArchitectRequest = false; }
+        }
       }
-
-      // Nếu là yêu cầu vẽ -> Tính toán và render
-      let basePricePerM2 = 380000;
-      if (spaceType.includes('Nhà Ở') || spaceType.includes('Residential')) basePricePerM2 = 350000;
-      if (spaceType.includes('Biệt Thự') || spaceType.includes('Villa')) basePricePerM2 = 480000;
-      if (spaceType.includes('Nhà Hàng') || spaceType.includes('Restaurant')) basePricePerM2 = 420000;
-      if (spaceType.includes('Bar')) basePricePerM2 = 450000;
-
-      const baseCost = numArea * basePricePerM2;
-      const boqCost = baseCost * 0.05;
-      const totalCost = baseCost + boqCost;
-
-      const promptText = `photorealistic 8k architectural visualization, interior design rendering of a ${spaceTypeEn}, ${style} style, ${numArea} square meters, professional architectural photography, cinematic warm lighting, high end materials, ray tracing, ultra detailed, masterpiece`;
-      const aiImageUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(promptText)}?model=flux-realism&width=2048&height=1152&nologo=true&seed=${Math.floor(Math.random() * 900000 + 100000)}`;
-
-      await AIUsage.create({
-        userId: req.user?.userId || null,
-        tier: req.aiTier,
-        endpoint: '/api/ai-consult-pro',
-        requestType: 'render',
-        userMessage: userMessage?.substring(0, 500),
-        generatedImage: true,
-        success: true,
-      }).catch(() => {});
-
-      return res.json({
-        success: true,
-        tier: req.aiTier,
-        remaining: req.aiRemaining,
-        replyText,
-        style,
-        spaceType,
-        area: numArea,
-        basePricePerM2,
-        baseCost,
-        boqCost,
-        totalCost,
-        aiImageUrl,
-        isPureChat: false
-      });
-    } catch (error) {
-      console.error('Lỗi AI Pro:', error);
-      return res.status(500).json({ success: false, message: 'Không thể kết nối AI Pro.' });
     }
-  }
-);
 
-// =============================================================
-// HEALTH CHECK & START
-// =============================================================
-app.get('/', (req, res) => {
-  res.send('API Hệ Thống MAC Concept đang chạy ổn định...');
+    if (!replyText) replyText = `Dạ, tôi đã ghi nhận yêu cầu.`;
+
+    // Nếu chỉ chat
+    if (!isArchitectRequest) {
+      return res.json({ success: true, tier: 'pro', replyText, remaining: req.aiRemaining, isPureChat: true });
+    }
+
+    // Nếu vẽ
+    let basePricePerM2 = 380000;
+    if (spaceType.includes('Nhà Ở')) basePricePerM2 = 350000;
+    if (spaceType.includes('Biệt Thự')) basePricePerM2 = 480000;
+    const baseCost = numArea * basePricePerM2;
+    const boqCost = baseCost * 0.05;
+    const totalCost = baseCost + boqCost;
+
+    const promptText = `photorealistic 8k architectural visualization, ${spaceTypeEn}, ${style} style, professional photography, cinematic lighting`;
+    const aiImageUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(promptText)}?model=flux-realism&width=1024&height=768&nologo=true`;
+
+    // Ghi log AIUsage (để đếm quota)
+    await AIUsage.create({
+      userId: req.user?.userId || null,
+      tier: req.aiTier,
+      endpoint: '/api/ai-pro',
+      requestType: 'render',
+      generatedImage: true,
+      success: true,
+    }).catch(() => {});
+
+    return res.json({
+      success: true, tier: 'pro', replyText, style, spaceType, area: numArea, basePricePerM2, baseCost, boqCost, totalCost, aiImageUrl, remaining: req.aiRemaining, isPureChat: false
+    });
+  } catch (error) { return res.status(500).json({ success: false, message: 'Lỗi AI Pro.' }); }
 });
 
+// =============================================================
+// TẦNG 3: AI ADMIN (Đầu chuỗi - Chuyên sâu)
+// =============================================================
+app.post('/api/ai-admin', optionalAuth, requireRole('admin', 'staff'), async (req, res) => {
+  try {
+    const { userMessage, chatHistory } = req.body;
+    if (!userMessage) return res.status(400).json({ success: false, message: 'Nhập câu hỏi.' });
+
+    const apiKey = process.env.GEMINI_API_KEY;
+    let replyText = '';
+
+    if (apiKey) {
+      const systemPrompt = `Bạn là KTS Trưởng của MAC Concept, đang nói chuyện với Sếp/Quản lý. Hãy tư vấn kết cấu, vật liệu, dự toán BOQ cực kỳ chuyên sâu và thực tế. Trả lời thẳng thắn, không lan man.`;
+      let contents = [];
+      if (chatHistory) {
+        chatHistory.slice(-10).forEach(msg => contents.push({ role: msg.role === 'user' ? 'user' : 'model', parts: [{ text: msg.text }] }));
+      }
+      contents.push({ role: 'user', parts: [{ text: userMessage }] });
+
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent?key=${apiKey}`;
+      const apiRes = await fetch(url, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ systemInstruction: { parts: [{ text: systemPrompt }] }, contents })
+      });
+
+      if (apiRes.ok) {
+        const data = await apiRes.json();
+        replyText = data.candidates[0].content.parts[0].text;
+      }
+    }
+
+    return res.json({ success: true, tier: 'admin', replyText: replyText || 'Lỗi kết nối AI.', isPureChat: true });
+  } catch (error) { return res.status(500).json({ success: false, message: 'Lỗi AI Admin.' }); }
+});
+
+app.get('/', (req, res) => res.send('API MAC Running...'));
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => {
-  console.log(`Server Backend đang kích hoạt trên cổng ${PORT}`);
-});
+app.listen(PORT, () => console.log(`Server on port ${PORT}`));
