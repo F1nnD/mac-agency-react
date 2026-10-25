@@ -376,14 +376,16 @@ export default function Dashboard() {
           </button>
 
           <button
-            onClick={() => { 
-              sessionStorage.setItem('isFromAdmin', 'true'); 
-              window.location.href = '/home'; // Sửa thành window.location.href
-            }}
-            className="w-full text-center text-xs tracking-widest uppercase text-white/50 hover:text-white transition-colors py-2.5 bg-zinc-900 border border-white/5 rounded-xl cursor-pointer font-semibold outline-none"
-          >
-            Thoát ra xem Web
-          </button>
+  onClick={() => {
+    // Lưu cờ báo hiệu Admin đang đi xem Web
+    sessionStorage.setItem('isAdminViewingWeb', 'true');
+    // Dùng navigate của React Router để chuyển trang không bị load lại
+    navigate('/home');
+  }}
+  className="w-full text-center text-xs tracking-widest uppercase text-white/50 hover:text-white transition-colors py-2.5 bg-zinc-900 border border-white/5 rounded-xl cursor-pointer font-semibold outline-none"
+>
+  Thoát ra xem Web
+</button>
 
           <button
             onClick={handleLogout}
