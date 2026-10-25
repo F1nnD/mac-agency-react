@@ -216,8 +216,8 @@ export default function Home() {
       const data = await askAI({
         userMessage: msg,
         chatHistory: chatMessages,
-        usePro: useProEndpoint,
-        style: aiStyle, area: aiArea, spaceType: aiSpaceType
+        usePro: useProEndpoint
+        // Đã bỏ style, area, spaceType để AI tự do tán gẫu
       });
       
       setChatMessages([

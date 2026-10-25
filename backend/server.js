@@ -51,7 +51,8 @@ const app = express();
 // =============================================================
 // 1. CẤU HÌNH CORS
 // =============================================================
-const allowedOrigins = (process.env.CORS_ORIGINS || 'http://localhost:5173,http://localhost:3000,http://localhost:5174')
+const defaultOrigins = 'http://localhost:5173,http://localhost:3000,http://localhost:5174,https://moreactisticconcept.onrender.com';
+const allowedOrigins = (process.env.CORS_ORIGINS || defaultOrigins)
   .split(',')
   .map(o => o.trim())
   .filter(Boolean);
