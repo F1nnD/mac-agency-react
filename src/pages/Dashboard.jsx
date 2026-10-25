@@ -10,6 +10,7 @@ import MarketPricesTab from '../components/admin/MarketPricesTab';
 import StatsTab from '../components/admin/StatsTab';
 import SettingsTab from '../components/admin/SettingsTab';
 import AdminAI from '../components/admin/AdminAI';
+
 export default function Dashboard() {
   const navigate = useNavigate();
 
@@ -323,143 +324,86 @@ export default function Dashboard() {
 
           <nav className="space-y-1.5">
             <div className="text-[9px] tracking-widest uppercase text-white/20 font-bold px-4 pb-1">Hệ thống danh mục</div>
+            
+            <button onClick={() => setActiveTab('admin-ai-tab')} className={`w-full text-left px-4 py-3 rounded-xl text-xs font-semibold tracking-widest uppercase transition-all cursor-pointer outline-none border ${activeTab === 'admin-ai-tab' ? 'text-amber-400 bg-amber-400/10 border-amber-400/30' : 'text-gray-400 hover:text-amber-400 hover:bg-amber-400/5 border-transparent'}`}>
+              Trợ Lý AI Nội Bộ
+            </button>
             <button onClick={() => setActiveTab('projects-tab')} className={`w-full text-left px-4 py-3 rounded-xl text-xs font-semibold tracking-widest uppercase transition-all cursor-pointer outline-none border ${activeTab === 'projects-tab' ? 'text-white bg-white/5 border-white/10' : 'text-gray-400 hover:text-white hover:bg-white/5 border-transparent'}`}>
               Quản lý dự án
             </button>
-            {/* NÚT QUẢN LÝ LEADS — MỚI */}
-<button
-  onClick={() => setActiveTab('leads-tab')}
-  className={`w-full text-left px-4 py-3 rounded-xl text-xs font-semibold tracking-widest uppercase transition-all cursor-pointer outline-none border ${
-    activeTab === 'leads-tab'
-      ? 'text-white bg-white/5 border-white/10'
-      : 'text-gray-400 hover:text-white hover:bg-white/5 border-transparent'
-  }`}
->
-  Quản lý Leads
-</button>
-<button
-  onClick={() => setActiveTab('admin-ai-tab')}
-  className={`w-full text-left px-4 py-3 rounded-xl text-xs font-semibold tracking-widest uppercase transition-all cursor-pointer outline-none border ${
-    activeTab === 'admin-ai-tab' ? 'text-amber-400 bg-amber-400/10 border-amber-400/30' : 'text-gray-400 hover:text-amber-400 hover:bg-amber-400/5 border-transparent'
-  }`}
->
-  Trợ Lý AI Nội Bộ
-</button>
-<button
-  onClick={() => setActiveTab('stats-tab')}
-  className={`w-full text-left px-4 py-3 rounded-xl text-xs font-semibold tracking-widest uppercase transition-all cursor-pointer outline-none border ${
-    activeTab === 'stats-tab' ? 'text-white bg-white/5 border-white/10' : 'text-gray-400 hover:text-white hover:bg-white/5 border-transparent'
-  }`}
->
-  Thống kê User
-</button>
-<button
-  onClick={() => setActiveTab('materials-tab')}
-  className={`w-full text-left px-4 py-3 rounded-xl text-xs font-semibold tracking-widest uppercase transition-all cursor-pointer outline-none border ${
-    activeTab === 'materials-tab' ? 'text-white bg-white/5 border-white/10' : 'text-gray-400 hover:text-white hover:bg-white/5 border-transparent'
-  }`}
->
-  Kho Vật Tư
-</button>
-<button
-  onClick={() => setActiveTab('market-prices-tab')}
-  className={`w-full text-left px-4 py-3 rounded-xl text-xs font-semibold tracking-widest uppercase transition-all cursor-pointer outline-none border ${
-    activeTab === 'market-prices-tab' ? 'text-white bg-white/5 border-white/10' : 'text-gray-400 hover:text-white hover:bg-white/5 border-transparent'
-  }`}
->
-  Giá Thị Trường
-</button>
-<button
-  onClick={() => setActiveTab('settings-tab')}
-  className={`w-full text-left px-4 py-3 rounded-xl text-xs font-semibold tracking-widest uppercase transition-all cursor-pointer outline-none border ${
-    activeTab === 'settings-tab' ? 'text-white bg-white/5 border-white/10' : 'text-gray-400 hover:text-white hover:bg-white/5 border-transparent'
-  }`}
->
-  Cài Đặt Chung
-</button>
-<button
-  onClick={() => setActiveTab('floorplans-tab')}
-  className={`w-full text-left px-4 py-3 rounded-xl text-xs font-semibold tracking-widest uppercase transition-all cursor-pointer outline-none border ${
-    activeTab === 'floorplans-tab' ? 'text-white bg-white/5 border-white/10' : 'text-gray-400 hover:text-white hover:bg-white/5 border-transparent'
-  }`}
->
-  Mặt Bằng Khách
-</button>
-<button
-  onClick={() => setActiveTab('concepts-tab')}
-  className={`w-full text-left px-4 py-3 rounded-xl text-xs font-semibold tracking-widest uppercase transition-all cursor-pointer outline-none border ${
-    activeTab === 'concepts-tab' ? 'text-white bg-white/5 border-white/10' : 'text-gray-400 hover:text-white hover:bg-white/5 border-transparent'
-  }`}
->
-  Concept Khách
-</button>
+            <button onClick={() => setActiveTab('leads-tab')} className={`w-full text-left px-4 py-3 rounded-xl text-xs font-semibold tracking-widest uppercase transition-all cursor-pointer outline-none border ${activeTab === 'leads-tab' ? 'text-white bg-white/5 border-white/10' : 'text-gray-400 hover:text-white hover:bg-white/5 border-transparent'}`}>
+              Quản lý Leads
+            </button>
+            <button onClick={() => setActiveTab('stats-tab')} className={`w-full text-left px-4 py-3 rounded-xl text-xs font-semibold tracking-widest uppercase transition-all cursor-pointer outline-none border ${activeTab === 'stats-tab' ? 'text-white bg-white/5 border-white/10' : 'text-gray-400 hover:text-white hover:bg-white/5 border-transparent'}`}>
+              Thống kê User
+            </button>
+            <button onClick={() => setActiveTab('materials-tab')} className={`w-full text-left px-4 py-3 rounded-xl text-xs font-semibold tracking-widest uppercase transition-all cursor-pointer outline-none border ${activeTab === 'materials-tab' ? 'text-white bg-white/5 border-white/10' : 'text-gray-400 hover:text-white hover:bg-white/5 border-transparent'}`}>
+              Kho Vật Tư
+            </button>
+            <button onClick={() => setActiveTab('market-prices-tab')} className={`w-full text-left px-4 py-3 rounded-xl text-xs font-semibold tracking-widest uppercase transition-all cursor-pointer outline-none border ${activeTab === 'market-prices-tab' ? 'text-white bg-white/5 border-white/10' : 'text-gray-400 hover:text-white hover:bg-white/5 border-transparent'}`}>
+              Giá Thị Trường
+            </button>
+            <button onClick={() => setActiveTab('settings-tab')} className={`w-full text-left px-4 py-3 rounded-xl text-xs font-semibold tracking-widest uppercase transition-all cursor-pointer outline-none border ${activeTab === 'settings-tab' ? 'text-white bg-white/5 border-white/10' : 'text-gray-400 hover:text-white hover:bg-white/5 border-transparent'}`}>
+              Cài Đặt Chung
+            </button>
+            <button onClick={() => setActiveTab('floorplans-tab')} className={`w-full text-left px-4 py-3 rounded-xl text-xs font-semibold tracking-widest uppercase transition-all cursor-pointer outline-none border ${activeTab === 'floorplans-tab' ? 'text-white bg-white/5 border-white/10' : 'text-gray-400 hover:text-white hover:bg-white/5 border-transparent'}`}>
+              Mặt Bằng Khách
+            </button>
+            <button onClick={() => setActiveTab('concepts-tab')} className={`w-full text-left px-4 py-3 rounded-xl text-xs font-semibold tracking-widest uppercase transition-all cursor-pointer outline-none border ${activeTab === 'concepts-tab' ? 'text-white bg-white/5 border-white/10' : 'text-gray-400 hover:text-white hover:bg-white/5 border-transparent'}`}>
+              Concept Khách
+            </button>
             <button onClick={() => setActiveTab('drafts-tab')} className={`w-full text-left px-4 py-3 rounded-xl text-xs font-semibold tracking-widest uppercase transition-all cursor-pointer outline-none border ${activeTab === 'drafts-tab' ? 'text-white bg-white/5 border-white/10' : 'text-gray-400 hover:text-white hover:bg-white/5 border-transparent'}`}>
               Quản lý Draft Layout
             </button>
             <button onClick={() => setActiveTab('packages-tab')} className={`w-full text-left px-4 py-3 rounded-xl text-xs font-semibold tracking-widest uppercase transition-all cursor-pointer outline-none border ${activeTab === 'packages-tab' ? 'text-white bg-white/5 border-white/10' : 'text-gray-400 hover:text-white hover:bg-white/5 border-transparent'}`}>
               Sửa bảng giá Web
             </button>
-          
           </nav>
         </div>
 
         <div className="border-t border-white/5 pt-4 space-y-2">
-  <div className="px-3 py-2 mb-2 bg-white/5 rounded-lg">
-    <p className="text-[9px] uppercase tracking-widest text-white/30 font-bold">Đang đăng nhập</p>
-    <p className="text-xs text-white font-mono truncate">{currentUser?.username || 'Unknown'}</p>
-    <p className="text-[9px] text-emerald-400 uppercase tracking-wider">{currentUser?.role || ''}</p>
-  </div>
+          <div className="px-3 py-2 mb-2 bg-white/5 rounded-lg">
+            <p className="text-[9px] uppercase tracking-widest text-white/30 font-bold">Đang đăng nhập</p>
+            <p className="text-xs text-white font-mono truncate">{currentUser?.username || 'Unknown'}</p>
+            <p className="text-[9px] text-emerald-400 uppercase tracking-wider">{currentUser?.role || ''}</p>
+          </div>
 
-  <button
-    onClick={() => { sessionStorage.removeItem('isFromAdmin'); navigate('/'); }}
-    className="w-full text-center text-[10px] tracking-widest uppercase text-white/30 hover:text-amber-400 transition-colors py-2 bg-transparent border border-dashed border-white/10 rounded-xl cursor-pointer font-semibold outline-none"
-  >
-    Quay lại cổng phân luồng
-  </button>
+          <button
+            onClick={() => { sessionStorage.removeItem('isFromAdmin'); navigate('/'); }}
+            className="w-full text-center text-[10px] tracking-widest uppercase text-white/30 hover:text-amber-400 transition-colors py-2 bg-transparent border border-dashed border-white/10 rounded-xl cursor-pointer font-semibold outline-none"
+          >
+            Quay lại cổng phân luồng
+          </button>
 
-  <button
-    onClick={() => { sessionStorage.setItem('isFromAdmin', 'true'); navigate('/home'); }}
-    className="w-full text-center text-xs tracking-widest uppercase text-white/50 hover:text-white transition-colors py-2.5 bg-zinc-900 border border-white/5 rounded-xl cursor-pointer font-semibold outline-none"
-  >
-    Thoát ra xem Web
-  </button>
+          <button
+            onClick={() => { 
+              sessionStorage.setItem('isFromAdmin', 'true'); 
+              window.location.href = '/home'; // Sửa thành window.location.href
+            }}
+            className="w-full text-center text-xs tracking-widest uppercase text-white/50 hover:text-white transition-colors py-2.5 bg-zinc-900 border border-white/5 rounded-xl cursor-pointer font-semibold outline-none"
+          >
+            Thoát ra xem Web
+          </button>
 
-  <button
-    onClick={handleLogout}
-    className="w-full text-center text-xs tracking-widest uppercase text-red-400 hover:text-white hover:bg-red-900/50 transition-colors py-2.5 bg-red-950/20 border border-red-900/30 rounded-xl cursor-pointer font-semibold outline-none"
-  >
-    Đăng xuất
-  </button>
-</div>
+          <button
+            onClick={handleLogout}
+            className="w-full text-center text-xs tracking-widest uppercase text-red-400 hover:text-white hover:bg-red-900/50 transition-colors py-2.5 bg-red-950/20 border border-red-900/30 rounded-xl cursor-pointer font-semibold outline-none"
+          >
+            Đăng xuất
+          </button>
+        </div>
       </aside>
 
       <main className="flex-1 bg-[#0b0b0b] p-8 md:p-12 overflow-y-auto h-screen text-left">
-      {activeTab === 'leads-tab' && (
-  <LeadsTab />
-)}
-{activeTab === 'admin-ai-tab' && (
-  <AdminAI />
-)}
-{activeTab === 'floorplans-tab' && (
-  <FloorPlansTab />
-)}
+        {activeTab === 'admin-ai-tab' && <AdminAI />}
+        {activeTab === 'leads-tab' && <LeadsTab />}
+        {activeTab === 'floorplans-tab' && <FloorPlansTab />}
+        {activeTab === 'concepts-tab' && <ConceptsTab />}
+        {activeTab === 'materials-tab' && <MaterialsTab />}
+        {activeTab === 'market-prices-tab' && <MarketPricesTab />}
+        {activeTab === 'stats-tab' && <StatsTab />}
+        {activeTab === 'settings-tab' && <SettingsTab />}
 
-{activeTab === 'concepts-tab' && (
-  <ConceptsTab />
-)}
-{activeTab === 'materials-tab' && (
-  <MaterialsTab />
-)}
-
-{activeTab === 'market-prices-tab' && (
-  <MarketPricesTab />
-)}
-{activeTab === 'stats-tab' && (
-  <StatsTab />
-)}
-{activeTab === 'settings-tab' && (
-  <SettingsTab />
-)}
         {activeTab === 'projects-tab' && (
           <div className="tab-content-anim space-y-8 w-full" id="project-form-anchor">
             <div className="flex items-center justify-between border-b border-white/5 pb-5">
