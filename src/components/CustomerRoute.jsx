@@ -12,10 +12,13 @@ export default function CustomerRoute({ children }) {
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
-  // Admin/staff không thuộc khu vực khách → đẩy về dashboard
-  if (['admin', 'staff'].includes(user.role)) {
-    return <Navigate to="/admin/dashboard" replace />;
-  }
+    // Kiểm tra xem Admin có đang chủ động đi xem Web không
+    const isViewingWeb = sessionStorage.getItem('isAdminViewingWeb') === 'true';
+
+    // Admin/staff không thuộc khu vực khách → đẩy về dashboard (trừ khi họ chủ động bấm xem Web)
+    if (['admin', 'staff'].includes(user.role) && !isViewingWeb) {
+      return <Navigate to="/admin/dashboard" replace />;
+    }
 
   // customer_free / customer_pro → OK
   return children;

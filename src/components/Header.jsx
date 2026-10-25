@@ -142,6 +142,18 @@ export default function Header({ showBackBtn = true }) {
             </span>
           </div>
         )}
+        {/* Nút quay lại Dashboard dành riêng cho Admin */}
+{user && ['admin', 'staff'].includes(user.role) && sessionStorage.getItem('isAdminViewingWeb') === 'true' && (
+  <button
+    onClick={() => {
+      sessionStorage.removeItem('isAdminViewingWeb');
+      navigate('/admin/dashboard');
+    }}
+    className="text-[10px] md:text-xs tracking-widest uppercase font-bold text-amber-400 hover:text-white border border-amber-400/40 hover:bg-amber-400/20 px-4 py-2 rounded-full transition-all duration-300 cursor-pointer outline-none mr-2"
+  >
+    Về trang Quản Trị
+  </button>
+)}
 
         {isCustomer ? (
           <button
