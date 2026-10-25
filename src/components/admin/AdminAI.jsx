@@ -36,7 +36,7 @@ export default function AdminAI() {
       <div className="flex items-center justify-between border-b border-white/5 pb-5">
         <div>
           <span className="text-[10px] tracking-[0.3em] text-amber-400 uppercase font-semibold">Admin Exclusive</span>
-          <h1 className="text-2xl font-light text-white uppercase mt-1">Trợ Lý AI Nội Bộ (Đầu Chuỗi)</h1>
+          <h1 className="text-2xl font-light text-white uppercase mt-1">Trợ Lý AI Nội Bộ</h1>
           <p className="text-xs text-gray-500 mt-2">Phân tích dữ liệu, hỗ trợ thiết kế và tính toán BOQ. Không giới hạn.</p>
         </div>
       </div>
