@@ -66,46 +66,20 @@ export const api = {
 // =============================================================
 // AUTH HELPERS
 // =============================================================
-export function isLoggedIn() {
-  return !!localStorage.getItem('mac_token');
-}
-
-export function getUserRole() {
-  const user = getCurrentUser();
-  return user?.role || 'guest';
-}
-
-export function isPro() {
-  const role = getUserRole();
-  return ['admin', 'staff', 'customer_pro'].includes(role);
-}
-
-export function isAdmin() {
-  return getUserRole() === 'admin';
-}
-
-export function isStaff() {
-  return getUserRole() === 'staff';
-}
-
-export function isCustomer() {
-  const role = getUserRole();
-  return ['customer_pro', 'customer_free'].includes(role);
-}
+export function isLoggedIn() { return !!localStorage.getItem('mac_token'); }
+export function getUserRole() { return getCurrentUser()?.role || 'guest'; }
+export function isPro() { return ['admin', 'staff', 'customer_pro'].includes(getUserRole()); }
+export function isAdmin() { return getUserRole() === 'admin'; }
+export function isStaff() { return getUserRole() === 'staff'; }
+export function isCustomer() { return ['customer_pro', 'customer_free'].includes(getUserRole()); }
 
 export async function registerUser({ username, password, fullName, email }) {
   const res = await fetch(`${API_BASE_URL}/api/auth/register`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ username, password, fullName, email })
   });
-
   const data = await res.json().catch(() => null);
-
-  if (!res.ok || !data?.success) {
-    throw new Error(data?.message || `Lỗi ${res.status}`);
-  }
-
+  if (!res.ok || !data?.success) throw new Error(data?.message || `Lỗi ${res.status}`);
   localStorage.setItem('mac_token', data.token);
   localStorage.setItem('mac_user', JSON.stringify(data.user));
   return data;
@@ -113,42 +87,42 @@ export async function registerUser({ username, password, fullName, email }) {
 
 export async function loginUser({ username, password }) {
   const res = await fetch(`${API_BASE_URL}/api/auth/login`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ username, password })
   });
-
   const data = await res.json().catch(() => null);
-
-  if (!res.ok || !data?.success) {
-    throw new Error(data?.message || `Lỗi ${res.status}`);
-  }
-
+  if (!res.ok || !data?.success) throw new Error(data?.message || `Lỗi ${res.status}`);
   localStorage.setItem('mac_token', data.token);
   localStorage.setItem('mac_user', JSON.stringify(data.user));
   return data;
 }
 
 // =============================================================
-// AI CONSULT
+// 3 TẦNG AI GỌI API
 // =============================================================
-export async function askAI({ userMessage, chatHistory, style, area, spaceType, usePro }) {
-  const endpoint = usePro ? '/api/ai-consult-pro' : '/api/ai-consult-free';
-
-  const payload = usePro
-    ? { userMessage, chatHistory, style, area, spaceType }
-    : { userMessage, chatHistory };
-
-  const data = await request(endpoint, {
+export async function askFreeAI({ userMessage, chatHistory }) {
+  return await request('/api/ai-free', {
     method: 'POST',
-    body: JSON.stringify(payload)
+    body: JSON.stringify({ userMessage, chatHistory })
   });
+}
 
-  return data;
+export async function askProAI({ userMessage, chatHistory, style, area, spaceType }) {
+  return await request('/api/ai-pro', {
+    method: 'POST',
+    body: JSON.stringify({ userMessage, chatHistory, style, area, spaceType })
+  });
+}
+
+export async function askAdminAI({ userMessage, chatHistory }) {
+  return await request('/api/ai-admin', {
+    method: 'POST',
+    body: JSON.stringify({ userMessage, chatHistory })
+  });
 }
 
 // =============================================================
-// DATA API
+// DATA API & LEADS API
 // =============================================================
 export const dataApi = {
   createFloorPlan: (data) => api.post('/api/data/floor-plans', data),
