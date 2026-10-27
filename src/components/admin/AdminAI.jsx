@@ -24,7 +24,7 @@ export default function AdminAI() {
 
       setMessages(prev => [...prev, { role: 'ai', text: data.replyText, image: data.aiImageUrl }]);
     } catch (err) {
-      setMessages(prev => [...prev, { role: 'ai', text: 'Lỗi kết nối AI Admin.' }]);
+      setMessages(prev => [...prev, { role: 'ai', text: `Lỗi chi tiết: ${err.message}` }]);
     } finally {
       setLoading(false);
     }
