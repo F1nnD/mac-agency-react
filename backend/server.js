@@ -234,22 +234,39 @@ app.post('/api/ai-admin', optionalAuth, requireRole('admin', 'staff'), async (re
     }
     contents.push({ role: 'user', parts: [{ text: userMessage }] });
 
-    // ĐÃ ĐỔI SANG MODEL gemini-3.8-flash
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=${apiKey}`;
-    
-    const apiRes = await fetch(url, {
-      method: 'POST', 
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ systemInstruction: { parts: [{ text: systemPrompt }] }, contents })
-    });
+    // Danh sách các model dự phòng (thử lần lượt từ tốt nhất đến ổn định nhất)
+    const models = ['gemini-3.8-flash', 'gemini-3.5-flash', 'gemini-2.5-flash'];
+    let replyText = '';
+    let lastError = '';
 
-    const data = await apiRes.json();
+    for (const model of models) {
+      try {
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+        const apiRes = await fetch(url, {
+          method: 'POST', 
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ systemInstruction: { parts: [{ text: systemPrompt }] }, contents })
+        });
 
-    if (!apiRes.ok) {
-      return res.status(apiRes.status).json({ success: false, message: data.error?.message || 'Lỗi gọi Gemini API' });
+        const data = await apiRes.json();
+
+        if (apiRes.ok && data.candidates) {
+          replyText = data.candidates[0].content.parts[0].text;
+          break; // Thành công thì dừng vòng lặp
+        } else {
+          lastError = data.error?.message || 'Lỗi không xác định';
+          console.log(`Model ${model} lỗi, thử model tiếp theo...`);
+        }
+      } catch (err) {
+        lastError = err.message;
+      }
     }
 
-    return res.json({ success: true, tier: 'admin', replyText: data.candidates[0].content.parts[0].text, isPureChat: true });
+    if (!replyText) {
+      return res.status(500).json({ success: false, message: `Hệ thống AI đang quá tải. Vui lòng thử lại sau ít phút. (${lastError})` });
+    }
+
+    return res.json({ success: true, tier: 'admin', replyText, isPureChat: true });
   } catch (error) { 
     return res.status(500).json({ success: false, message: error.message }); 
   }
