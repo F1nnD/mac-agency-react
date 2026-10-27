@@ -43,7 +43,8 @@ const statsRoutes = require('./src/routes/statsRoutes');
 // ===== INIT =====
 dotenv.config();
 const app = express();
-
+// THÊM DÒNG NÀY ĐỂ SỬA LỖI RATE LIMIT TRÊN RENDER
+app.set('trust proxy', 1); 
 // 1. CẤU HÌNH CORS
 const defaultOrigins = 'http://localhost:5173,http://localhost:3000,http://localhost:5174,https://moreactisticconcept.onrender.com';
 const allowedOrigins = (process.env.CORS_ORIGINS || defaultOrigins).split(',').map(o => o.trim()).filter(Boolean);
