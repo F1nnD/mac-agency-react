@@ -22,12 +22,13 @@ export default function AdminAI() {
                 chatHistory: messages
               });
 
-      setMessages(prev => [...prev, { role: 'ai', text: data.replyText, image: data.aiImageUrl }]);
-    } catch (err) {
-      setMessages(prev => [...prev, { role: 'ai', text: `Lỗi chi tiết: ${err.message}` }]);
-    } finally {
-      setLoading(false);
-    }
+              setMessages(prev => [...prev, { role: 'ai', text: data.replyText, image: data.aiImageUrl }]);
+            } catch (err) {
+              console.error("Lỗi API:", err);
+              setMessages(prev => [...prev, { role: 'ai', text: `Lỗi chi tiết: ${err.message}` }]);
+            } finally {
+              setLoading(false);
+            }
   };
 
   return (

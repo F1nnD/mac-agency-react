@@ -225,29 +225,38 @@ app.post('/api/ai-admin', optionalAuth, requireRole('admin', 'staff'), async (re
     if (!userMessage) return res.status(400).json({ success: false, message: 'Nhập câu hỏi.' });
 
     const apiKey = process.env.GEMINI_API_KEY;
-    let replyText = '';
+    if (!apiKey) return res.status(500).json({ success: false, message: 'Thiếu GEMINI_API_KEY trên server.' });
 
-    if (apiKey) {
-      const systemPrompt = `Bạn là KTS Trưởng của MAC Concept, đang nói chuyện với Sếp/Quản lý. Hãy tư vấn kết cấu, vật liệu, dự toán BOQ cực kỳ chuyên sâu và thực tế. Trả lời thẳng thắn, không lan man.`;
-      let contents = [];
-      if (chatHistory) {
-        chatHistory.slice(-10).forEach(msg => contents.push({ role: msg.role === 'user' ? 'user' : 'model', parts: [{ text: msg.text }] }));
-      }
-      contents.push({ role: 'user', parts: [{ text: userMessage }] });
+    const systemPrompt = `Bạn là KTS Trưởng của MAC Concept. Tư vấn kết cấu, vật liệu, dự toán BOQ chuyên sâu.`;
+    let contents = [];
+    if (chatHistory) {
+      chatHistory.slice(-10).forEach(msg => contents.push({ role: msg.role === 'user' ? 'user' : 'model', parts: [{ text: msg.text }] }));
+    }
+    contents.push({ role: 'user', parts: [{ text: userMessage }] });
 
-      const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;      const apiRes = await fetch(url, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ systemInstruction: { parts: [{ text: systemPrompt }] }, contents })
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+    
+    const apiRes = await fetch(url, {
+      method: 'POST', 
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ systemInstruction: { parts: [{ text: systemPrompt }] }, contents })
+    });
+
+    const data = await apiRes.json();
+
+    if (!apiRes.ok) {
+      console.error('LỖI TỪ GEMINI API:', data);
+      return res.status(apiRes.status).json({ 
+        success: false, 
+        message: data.error?.message || 'Lỗi gọi Gemini API' 
       });
-
-      if (apiRes.ok) {
-        const data = await apiRes.json();
-        replyText = data.candidates[0].content.parts[0].text;
-      }
     }
 
-    return res.json({ success: true, tier: 'admin', replyText: replyText || 'Lỗi kết nối AI.', isPureChat: true });
-  } catch (error) { return res.status(500).json({ success: false, message: 'Lỗi AI Admin.' }); }
+    return res.json({ success: true, tier: 'admin', replyText: data.candidates[0].content.parts[0].text, isPureChat: true });
+  } catch (error) { 
+    console.error('LỖI CODE BACKEND:', error);
+    return res.status(500).json({ success: false, message: error.message }); 
+  }
 });
 
 app.get('/', (req, res) => res.send('API MAC Running...'));
