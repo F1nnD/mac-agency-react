@@ -234,7 +234,8 @@ app.post('/api/ai-admin', optionalAuth, requireRole('admin', 'staff'), async (re
     }
     contents.push({ role: 'user', parts: [{ text: userMessage }] });
 
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+    // ĐÃ ĐỔI SANG MODEL gemini-3.8-flash
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=${apiKey}`;
     
     const apiRes = await fetch(url, {
       method: 'POST', 
@@ -245,16 +246,11 @@ app.post('/api/ai-admin', optionalAuth, requireRole('admin', 'staff'), async (re
     const data = await apiRes.json();
 
     if (!apiRes.ok) {
-      console.error('LỖI TỪ GEMINI API:', data);
-      return res.status(apiRes.status).json({ 
-        success: false, 
-        message: data.error?.message || 'Lỗi gọi Gemini API' 
-      });
+      return res.status(apiRes.status).json({ success: false, message: data.error?.message || 'Lỗi gọi Gemini API' });
     }
 
     return res.json({ success: true, tier: 'admin', replyText: data.candidates[0].content.parts[0].text, isPureChat: true });
   } catch (error) { 
-    console.error('LỖI CODE BACKEND:', error);
     return res.status(500).json({ success: false, message: error.message }); 
   }
 });
