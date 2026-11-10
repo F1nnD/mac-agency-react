@@ -73,6 +73,7 @@ export default function Header({ showBackBtn = true }) {
   const isCustomer = user && ['customer_free', 'customer_pro'].includes(user.role);
 
   return (
+    <>
     <header className="fixed top-0 left-0 right-0 z-50 bg-[#0b0b0b]/90 backdrop-blur-md border-b border-white/5 px-4 py-4 md:px-16 flex items-center justify-between w-full h-20 transition-all">
       {/* KHỐI LOGO VÀ NÚT QUAY LẠI */}
       <div className="flex items-center select-none">
@@ -209,7 +210,9 @@ export default function Header({ showBackBtn = true }) {
         </button>
       </div>
 
-      {/* NGĂN KÉO MENU ĐIỆN THOẠI */}
+    </header>
+
+    {/* NGĂN KÉO MENU ĐIỆN THOẠI: để NGOÀI header vì backdrop-filter nhốt phần tử fixed bên trong */}
       <div
         className={`md:hidden fixed inset-x-0 top-20 bottom-0 z-40 transition-opacity duration-300 ${menuOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}
         aria-hidden={!menuOpen}
@@ -237,6 +240,6 @@ export default function Header({ showBackBtn = true }) {
           </div>
         </nav>
       </div>
-    </header>
+    </>
   );
 }
