@@ -9,6 +9,8 @@ import MaterialsTab from '../components/admin/MaterialsTab';
 import MarketPricesTab from '../components/admin/MarketPricesTab';
 import StatsTab from '../components/admin/StatsTab';
 import SettingsTab from '../components/admin/SettingsTab';
+import BOQTab from '../components/admin/BOQTab';
+import UsersTab from '../components/admin/UsersTab';
 import AdminAI from '../components/admin/AdminAI';
 
 export default function Dashboard() {
@@ -343,6 +345,14 @@ export default function Dashboard() {
             <button onClick={() => setActiveTab('market-prices-tab')} className={`w-full text-left px-4 py-3 rounded-xl text-xs font-semibold tracking-widest uppercase transition-all cursor-pointer outline-none border ${activeTab === 'market-prices-tab' ? 'text-white bg-white/5 border-white/10' : 'text-gray-400 hover:text-white hover:bg-white/5 border-transparent'}`}>
               Giá Thị Trường
             </button>
+            <button onClick={() => setActiveTab('boq-tab')} className={`w-full text-left px-4 py-3 rounded-xl text-xs font-semibold tracking-widest uppercase transition-all cursor-pointer outline-none border ${activeTab === 'boq-tab' ? 'text-white bg-white/5 border-white/10' : 'text-gray-400 hover:text-white hover:bg-white/5 border-transparent'}`}>
+              Dự Toán BOQ
+            </button>
+            {currentUser?.role === 'admin' && (
+  <button onClick={() => setActiveTab('users-tab')} className={`w-full text-left px-4 py-3 rounded-xl text-xs font-semibold tracking-widest uppercase transition-all cursor-pointer outline-none border ${activeTab === 'users-tab' ? 'text-white bg-white/5 border-white/10' : 'text-gray-400 hover:text-white hover:bg-white/5 border-transparent'}`}>
+              Quản lý Người dùng
+            </button>
+            )}
             <button onClick={() => setActiveTab('settings-tab')} className={`w-full text-left px-4 py-3 rounded-xl text-xs font-semibold tracking-widest uppercase transition-all cursor-pointer outline-none border ${activeTab === 'settings-tab' ? 'text-white bg-white/5 border-white/10' : 'text-gray-400 hover:text-white hover:bg-white/5 border-transparent'}`}>
               Cài Đặt Chung
             </button>
@@ -405,6 +415,8 @@ export default function Dashboard() {
         {activeTab === 'market-prices-tab' && <MarketPricesTab />}
         {activeTab === 'stats-tab' && <StatsTab />}
         {activeTab === 'settings-tab' && <SettingsTab />}
+        {activeTab === 'boq-tab' && <BOQTab />}
+        {activeTab === 'users-tab' && currentUser?.role === 'admin' && <UsersTab />}
 
         {activeTab === 'projects-tab' && (
           <div className="tab-content-anim space-y-8 w-full" id="project-form-anchor">

@@ -1,0 +1,231 @@
+import React, { useEffect, useRef, useState } from 'react';
+import { studioApi } from '../utils/apiClient';
+
+const BUDGET_TEXT = {
+  'trong-ngan-sach': { label: 'Nằm trong ngân sách bạn nêu', cls: 'text-emerald-400 border-emerald-500/30 bg-emerald-500/10' },
+  'sat-ngan-sach': { label: 'Sát ngân sách bạn nêu', cls: 'text-amber-400 border-amber-400/30 bg-amber-400/10' },
+  'vuot-ngan-sach': { label: 'Có thể vượt ngân sách bạn nêu', cls: 'text-red-400 border-red-500/30 bg-red-500/10' }
+};
+
+const CONFIDENCE_LABEL = { cao: 'Độ tin cậy cao', 'trung-binh': 'Độ tin cậy trung bình', thap: 'Độ tin cậy thấp' };
+
+const formatVnd = (n) => `${Math.round(Number(n) || 0).toLocaleString('vi-VN')} đ`;
+const formatBillion = (n) => {
+  const v = Number(n) || 0;
+  return v >= 1_000_000_000 ? `${(v / 1_000_000_000).toFixed(2).replace(/\.?0+$/, '')} tỷ` : `${Math.round(v / 1_000_000)} triệu`;
+};
+
+function Section({ title, children }) {
+  return (
+    <div className="space-y-3">
+      <h4 className="text-[10px] uppercase tracking-widest text-white/40 font-bold">{title}</h4>
+      {children}
+    </div>
+  );
+}
+
+function BulletList({ items }) {
+  if (!items?.length) return null;
+  return (
+    <ul className="space-y-2">
+      {items.map((t, i) => (
+        <li key={i} className="flex gap-3 text-xs text-neutral-300 leading-relaxed">
+          <span className="mt-1.5 w-1 h-1 rounded-full bg-amber-400 shrink-0" />
+          <span>{t}</span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+export default function RenderResult({ floorPlan, concept, onDone }) {
+  const [state, setState] = useState('loading'); // loading | done | error
+  const [result, setResult] = useState(null);
+  const [error, setError] = useState('');
+  const [imgState, setImgState] = useState('loading'); // loading | ok | failed
+  const [imgKey, setImgKey] = useState(0);
+  const started = useRef(false);
+
+  const run = async () => {
+    setState('loading');
+    setError('');
+    setImgState('loading');
+    try {
+      const res = await studioApi.render({ floorPlanId: floorPlan._id, conceptId: concept._id });
+      setResult(res.data);
+      setState('done');
+    } catch (err) {
+      setError(err.message || 'Không thể diễn hoạ lúc này.');
+      setState('error');
+    }
+  };
+
+  // Chỉ tự chạy một lần (tránh trừ lượt hai lần khi React StrictMode chạy lại hiệu ứng)
+  useEffect(() => {
+    if (started.current) return;
+    started.current = true;
+    run();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  if (state === 'loading') {
+    return (
+      <div className="text-center py-16 space-y-5">
+        <div className="w-14 h-14 mx-auto rounded-full border-2 border-white/10 border-t-amber-400 animate-spin" />
+        <div className="space-y-2">
+          <h3 className="text-lg font-bold text-white uppercase">AI đang diễn hoạ không gian</h3>
+          <p className="text-xs text-neutral-500 max-w-sm mx-auto">
+            Đang phân tích mặt bằng {floorPlan.totalArea} m², phong cách {concept.style} và dựng phối cảnh. Việc này có thể mất vài chục giây.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  if (state === 'error') {
+    return (
+      <div className="text-center py-12 space-y-5 max-w-md mx-auto">
+        <div className="bg-red-500/10 border border-red-500/20 text-red-400 text-xs px-4 py-3 rounded-xl">{error}</div>
+        <p className="text-xs text-neutral-500">
+          Thông tin của bạn đã được lưu, đội ngũ MAC vẫn sẽ liên hệ tư vấn.
+        </p>
+        <div className="flex gap-3 justify-center">
+          <button
+            onClick={run}
+            className="border border-white/10 bg-black/20 text-[10px] font-bold uppercase tracking-widest px-6 py-3 rounded-xl hover:border-white transition-all"
+          >
+            Thử lại
+          </button>
+          <button
+            onClick={() => onDone && onDone(null)}
+            className="bg-white text-black px-6 py-3 rounded-xl text-[10px] font-bold uppercase tracking-widest hover:bg-neutral-200 transition-all"
+          >
+            Bỏ qua
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  const { analysis, estimate, quota, imageUrl, analysisSource } = result;
+  const budget = BUDGET_TEXT[estimate?.budgetStatus];
+
+  return (
+    <div className="space-y-8 text-left">
+      <div className="space-y-1">
+        <span className="text-[10px] tracking-[0.3em] text-emerald-400 font-mono uppercase block">Kết quả diễn hoạ</span>
+        <h3 className="text-lg font-bold text-white uppercase">{floorPlan.projectName}</h3>
+        <p className="text-xs text-neutral-500">
+          {concept.style} · {floorPlan.totalArea} m² ({floorPlan.width} x {floorPlan.length} m)
+        </p>
+      </div>
+
+      {/* PHỐI CẢNH */}
+      <div className="relative rounded-2xl overflow-hidden border border-white/10 bg-black/40 aspect-[4/3]">
+        {imgState !== 'ok' && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-center px-6">
+            {imgState === 'loading' ? (
+              <>
+                <div className="w-8 h-8 rounded-full border-2 border-white/10 border-t-amber-400 animate-spin" />
+                <p className="text-[11px] text-neutral-500">Đang dựng ảnh phối cảnh...</p>
+              </>
+            ) : (
+              <>
+                <p className="text-[11px] text-neutral-400">Chưa tải được ảnh phối cảnh.</p>
+                <button
+                  onClick={() => { setImgState('loading'); setImgKey(k => k + 1); }}
+                  className="border border-white/10 text-[10px] font-bold uppercase tracking-widest px-4 py-2 rounded-lg hover:border-white transition-all"
+                >
+                  Tải lại ảnh
+                </button>
+              </>
+            )}
+          </div>
+        )}
+        <img
+          key={imgKey}
+          src={`${imageUrl}${imgKey ? `&retry=${imgKey}` : ''}`}
+          alt={`Phối cảnh ${concept.style}`}
+          onLoad={() => setImgState('ok')}
+          onError={() => setImgState('failed')}
+          className={`w-full h-full object-cover transition-opacity duration-700 ${imgState === 'ok' ? 'opacity-100' : 'opacity-0'}`}
+        />
+      </div>
+      <p className="text-[10px] text-neutral-600 -mt-4">
+        Ảnh do AI tạo để gợi ý không khí và vật liệu, không phải bản vẽ thi công.
+      </p>
+
+      {/* TÓM TẮT */}
+      {analysis?.summary && (
+        <p className="text-sm text-neutral-200 leading-relaxed border-l-2 border-amber-400 pl-4">{analysis.summary}</p>
+      )}
+
+      {/* DỰ TOÁN SƠ BỘ */}
+      <div className="bg-zinc-900/40 border border-white/5 rounded-2xl p-6 space-y-4">
+        <h4 className="text-[10px] uppercase tracking-widest text-white/40 font-bold">Dự toán sơ bộ</h4>
+        {estimate?.available ? (
+          <>
+            <div>
+              <p className="text-2xl md:text-3xl font-bold text-white font-mono">
+                {formatBillion(estimate.rangeLow)} – {formatBillion(estimate.rangeHigh)}
+              </p>
+              <p className="text-[11px] text-neutral-500 mt-1">
+                Khoảng {formatVnd(estimate.perM2.low)} – {formatVnd(estimate.perM2.high)} / m² · {CONFIDENCE_LABEL[estimate.confidence] || ''}
+              </p>
+            </div>
+            {budget && (
+              <span className={`inline-block text-[10px] font-bold uppercase tracking-wider px-3 py-1.5 rounded-lg border ${budget.cls}`}>
+                {budget.label}
+              </span>
+            )}
+            <ul className="space-y-1.5">
+              {estimate.assumptions?.map((a, i) => (
+                <li key={i} className="text-[11px] text-neutral-500 leading-relaxed">• {a}</li>
+              ))}
+            </ul>
+            <p className="text-[11px] text-neutral-400 leading-relaxed">{estimate.disclaimer}</p>
+          </>
+        ) : (
+          <p className="text-xs text-neutral-400">{estimate?.message}</p>
+        )}
+      </div>
+
+      {/* PHÂN TÍCH */}
+      <div className="grid md:grid-cols-2 gap-8">
+        <Section title="Nhận xét mặt bằng"><BulletList items={analysis?.siteObservations} /></Section>
+        <Section title="Gợi ý bố trí công năng"><BulletList items={analysis?.layoutSuggestions} /></Section>
+        <Section title="Ngôn ngữ thiết kế"><BulletList items={analysis?.designLanguage} /></Section>
+        <Section title="Vật liệu đề xuất">
+          <div className="flex flex-wrap gap-2">
+            {analysis?.materialPalette?.map((m, i) => (
+              <span key={i} className="text-[11px] text-neutral-300 border border-white/10 bg-black/30 px-3 py-1.5 rounded-lg">{m}</span>
+            ))}
+          </div>
+        </Section>
+      </div>
+
+      {analysis?.lightingStrategy && (
+        <Section title="Chiến lược ánh sáng">
+          <p className="text-xs text-neutral-300 leading-relaxed">{analysis.lightingStrategy}</p>
+        </Section>
+      )}
+
+      {analysis?.risks?.length > 0 && (
+        <Section title="Cần khảo sát thêm"><BulletList items={analysis.risks} /></Section>
+      )}
+
+      <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-4 border-t border-white/5">
+        <p className="text-[10px] text-neutral-600">
+          {analysisSource === 'gemini' ? 'Phân tích bởi AI' : 'Phân tích theo bộ quy tắc thiết kế MAC'}
+          {quota && !quota.unlimited && ` · Còn ${quota.remaining} lượt diễn hoạ trong chu kỳ này`}
+        </p>
+        <button
+          onClick={() => onDone && onDone(result)}
+          className="bg-amber-400 hover:bg-amber-300 text-black px-8 py-3 rounded-xl text-xs font-bold uppercase tracking-widest transition-all"
+        >
+          Hoàn tất
+        </button>
+      </div>
+    </div>
+  );
+}

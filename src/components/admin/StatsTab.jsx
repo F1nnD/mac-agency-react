@@ -1,10 +1,12 @@
 import React, { useEffect, useState } from 'react';
-import { api } from '../../utils/apiClient';
+import { api, statsApi } from '../../utils/apiClient';
 
 export default function StatsTab() {
   const [overview, setOverview] = useState(null);
   const [topUsers, setTopUsers] = useState([]);
   const [activity, setActivity] = useState([]);
+  const [funnel, setFunnel] = useState(null);
+  const [days, setDays] = useState(30);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -21,6 +23,8 @@ export default function StatsTab() {
       setOverview(ovRes.data);
       setTopUsers(topRes.data);
       setActivity(actRes.data.loginsByDay || []);
+      // Phễu là phần phụ: lỗi ở đây không được làm hỏng cả trang thống kê
+      statsApi.funnel(days).then(r => setFunnel(r.data)).catch(() => setFunnel(null));
     } catch (err) {
       setError(err.message || 'Lỗi tải dữ liệu thống kê.');
     } finally {
@@ -30,7 +34,8 @@ export default function StatsTab() {
 
   useEffect(() => {
     fetchStats();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [days]);
 
   if (loading) {
     return <div className="text-center py-20 text-white/30 text-xs uppercase">Đang tải thống kê...</div>;
@@ -132,6 +137,72 @@ export default function StatsTab() {
           </div>
         </div>
       </div>
+
+      {/* PHỄU CHUYỂN ĐỔI */}
+      {funnel && (
+        <div className="bg-zinc-900/20 border border-white/5 rounded-2xl p-6 space-y-6">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h3 className="text-xs font-bold uppercase tracking-widest text-white">Phễu chuyển đổi khách hàng</h3>
+              <p className="text-[10px] text-gray-500 mt-1">Khách rơi ở bước nào, quan tâm style nào nhiều nhất</p>
+            </div>
+            <select
+              value={days}
+              onChange={e => setDays(Number(e.target.value))}
+              className="bg-black/40 border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none cursor-pointer"
+            >
+              <option value={7}>7 ngày</option>
+              <option value={30}>30 ngày</option>
+              <option value={90}>90 ngày</option>
+              <option value={365}>1 năm</option>
+            </select>
+          </div>
+
+          <div className="space-y-3">
+            {funnel.steps.map((s, i) => (
+              <div key={s.key} className="flex items-center gap-4">
+                <span className="w-36 shrink-0 text-[11px] text-gray-400">{s.label}</span>
+                <div className="flex-1 h-7 bg-black/40 rounded-lg overflow-hidden">
+                  <div
+                    className="h-full bg-emerald-500/30 border-r-2 border-emerald-400 transition-all"
+                    style={{ width: `${Math.max(s.pctOfFirst, s.count ? 2 : 0)}%` }}
+                  />
+                </div>
+                <span className="w-12 text-right text-sm font-bold text-white font-mono">{s.count}</span>
+                <span className="w-24 text-right text-[10px] text-gray-500 font-mono">
+                  {i === 0 ? '' : `${s.pctOfPrev}% bước trước`}
+                </span>
+              </div>
+            ))}
+          </div>
+
+          <div className="grid md:grid-cols-2 gap-6 pt-4 border-t border-white/5">
+            {[['Style được chọn nhiều', funnel.styles], ['Loại công trình', funnel.spaceTypes]].map(([title, rows]) => {
+              const max = Math.max(...rows.map(r => r.count), 1);
+              return (
+                <div key={title}>
+                  <p className="text-[10px] uppercase tracking-widest text-white/40 font-bold mb-3">{title}</p>
+                  {rows.length === 0 ? (
+                    <p className="text-xs text-white/30 italic">Chưa có dữ liệu</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {rows.slice(0, 6).map(r => (
+                        <div key={r._id} className="flex items-center gap-3 text-[11px]">
+                          <span className="w-28 shrink-0 text-gray-400 truncate">{r._id}</span>
+                          <div className="flex-1 h-2 bg-black/40 rounded">
+                            <div className="h-full bg-amber-400/60 rounded" style={{ width: `${(r.count / max) * 100}%` }} />
+                          </div>
+                          <span className="w-8 text-right font-mono text-white">{r.count}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* TOP USER QUAN TÂM NHẤT */}
       <div className="bg-zinc-900/20 border border-white/5 rounded-2xl overflow-hidden">

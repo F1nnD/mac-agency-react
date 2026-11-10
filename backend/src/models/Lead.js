@@ -73,6 +73,18 @@ const LeadSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
     default: null
+  },
+
+  // Tóm tắt AI cho telesale (tự tạo khi khách để lại thông tin, làm mới sau mỗi lần render)
+  aiSummary: {
+    type: mongoose.Schema.Types.Mixed,
+    default: null
+  },
+
+  // Đã báo "lead nóng" tới kênh nội bộ chưa (tránh báo lặp)
+  hotNotifiedAt: {
+    type: Date,
+    default: null
   }
 
 }, { timestamps: true });

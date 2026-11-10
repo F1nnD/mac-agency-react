@@ -1,6 +1,7 @@
 const express = require('express');
+const mongoose = require('mongoose');
 const router = express.Router();
-const { verifyToken, requireRole, optionalAuth } = require('../middleware/authMiddleware');
+const { verifyToken, requireRole } = require('../middleware/authMiddleware');
 
 const FloorPlan = require('../models/FloorPlan');
 const Concept = require('../models/Concept');
@@ -9,318 +10,459 @@ const Material = require('../models/Material');
 const MarketPrice = require('../models/MarketPrice');
 const BOQ = require('../models/BOQ');
 
+const { calcTotals } = require('../services/estimateService');
+const { refreshEngagementSafe } = require('../services/engagementService');
+const { summarizeLead, processLeadsInBackground } = require('../services/leadService');
+
+const isStaff = user => ['admin', 'staff'].includes(user?.role);
+const isValidId = id => mongoose.isValidObjectId(id);
+const pick = (obj, keys) =>
+  keys.reduce((acc, k) => (obj && obj[k] !== undefined ? { ...acc, [k]: obj[k] } : acc), {});
+const fail = (res, error, status = 400) => res.status(status).json({ success: false, message: error.message || error });
+
+// Ảnh mặt bằng lưu dạng data URL: giới hạn số lượng và dung lượng để database không phình
+const MAX_IMAGES = 5;
+const MAX_IMAGE_CHARS = 3 * 1024 * 1024;
+function cleanImages(images) {
+  if (!Array.isArray(images)) return [];
+  return images
+    .filter(src => typeof src === 'string' && /^data:image\/(png|jpe?g|webp);base64,/.test(src) && src.length <= MAX_IMAGE_CHARS)
+    .slice(0, MAX_IMAGES);
+}
+
 // ============================================================
 // FLOOR PLANS
 // ============================================================
-
-// Tạo mặt bằng
 router.post('/floor-plans', verifyToken, async (req, res) => {
   try {
-    const { projectName, width, length, address, city, district, siteStatus, images, notes } = req.body;
+    const body = pick(req.body, ['projectName', 'address', 'city', 'district', 'siteStatus', 'notes']);
+    const width = Number(req.body.width);
+    const length = Number(req.body.length);
+    if (!(width > 0) || !(length > 0) || width > 500 || length > 500) {
+      return fail(res, 'Kích thước ngang/dài không hợp lệ.');
+    }
 
     const floorPlan = await FloorPlan.create({
+      ...body,
       userId: req.user.userId,
-      projectName,
       width,
       length,
-      totalArea: width * length,
-      address,
-      city,
-      district,
-      siteStatus,
-      images: images || [],
-      notes
+      totalArea: Math.round(width * length * 100) / 100,
+      images: cleanImages(req.body.images)
     });
+    refreshEngagementSafe(req.user.userId);
 
     res.status(201).json({ success: true, data: floorPlan });
   } catch (error) {
-    res.status(400).json({ success: false, message: error.message });
+    fail(res, error);
   }
 });
 
-// Lấy danh sách mặt bằng
 router.get('/floor-plans', verifyToken, async (req, res) => {
   try {
-    const filter = ['admin', 'staff'].includes(req.user.role)
-      ? {}
-      : { userId: req.user.userId };
-
-    const floorPlans = await FloorPlan.find(filter).sort({ createdAt: -1 });
+    const filter = isStaff(req.user) ? {} : { userId: req.user.userId };
+    // Danh sách không cần kèm ảnh nặng
+    const floorPlans = await FloorPlan.find(filter).select('-images').sort({ createdAt: -1 }).limit(500);
     res.json({ success: true, data: floorPlans });
   } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
+    fail(res, error, 500);
   }
 });
 
-// Lấy chi tiết mặt bằng
-router.get('/floor-plans/:id', optionalAuth, async (req, res) => {
+// Chi tiết mặt bằng: chỉ chủ sở hữu hoặc nhân viên (trước đây ai biết ID cũng xem được)
+router.get('/floor-plans/:id', verifyToken, async (req, res) => {
   try {
+    if (!isValidId(req.params.id)) return fail(res, 'Mã không hợp lệ.');
     const floorPlan = await FloorPlan.findById(req.params.id);
-    if (!floorPlan) return res.status(404).json({ success: false, message: 'Không tìm thấy' });
+    if (!floorPlan) return fail(res, 'Không tìm thấy', 404);
+    if (floorPlan.userId.toString() !== req.user.userId && !isStaff(req.user)) {
+      return fail(res, 'Không có quyền', 403);
+    }
     res.json({ success: true, data: floorPlan });
   } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
+    fail(res, error, 500);
   }
 });
 
-// Cập nhật mặt bằng
 router.put('/floor-plans/:id', verifyToken, async (req, res) => {
   try {
+    if (!isValidId(req.params.id)) return fail(res, 'Mã không hợp lệ.');
     const floorPlan = await FloorPlan.findById(req.params.id);
-    if (!floorPlan) return res.status(404).json({ success: false, message: 'Không tìm thấy' });
-
-    if (floorPlan.userId.toString() !== req.user.userId && !['admin', 'staff'].includes(req.user.role)) {
-      return res.status(403).json({ success: false, message: 'Không có quyền' });
+    if (!floorPlan) return fail(res, 'Không tìm thấy', 404);
+    if (floorPlan.userId.toString() !== req.user.userId && !isStaff(req.user)) {
+      return fail(res, 'Không có quyền', 403);
     }
 
-    const { width, length, ...rest } = req.body;
-    const update = { ...rest };
-    if (width && length) {
-      update.width = width;
-      update.length = length;
-      update.totalArea = width * length;
-    }
+    const update = pick(req.body, ['projectName', 'address', 'city', 'district', 'siteStatus', 'notes']);
+    if (isStaff(req.user) && req.body.status !== undefined) update.status = req.body.status;
+    if (req.body.images !== undefined) update.images = cleanImages(req.body.images);
 
-    const updated = await FloorPlan.findByIdAndUpdate(req.params.id, update, { new: true });
+    const width = req.body.width !== undefined ? Number(req.body.width) : floorPlan.width;
+    const length = req.body.length !== undefined ? Number(req.body.length) : floorPlan.length;
+    if (!(width > 0) || !(length > 0) || width > 500 || length > 500) return fail(res, 'Kích thước không hợp lệ.');
+    update.width = width;
+    update.length = length;
+    update.totalArea = Math.round(width * length * 100) / 100;
+
+    const updated = await FloorPlan.findByIdAndUpdate(req.params.id, update, { new: true, runValidators: true });
     res.json({ success: true, data: updated });
   } catch (error) {
-    res.status(400).json({ success: false, message: error.message });
+    fail(res, error);
   }
 });
 
-// Xoá mặt bằng
 router.delete('/floor-plans/:id', verifyToken, async (req, res) => {
   try {
+    if (!isValidId(req.params.id)) return fail(res, 'Mã không hợp lệ.');
     const floorPlan = await FloorPlan.findById(req.params.id);
-    if (!floorPlan) return res.status(404).json({ success: false, message: 'Không tìm thấy' });
-
+    if (!floorPlan) return fail(res, 'Không tìm thấy', 404);
     if (floorPlan.userId.toString() !== req.user.userId && req.user.role !== 'admin') {
-      return res.status(403).json({ success: false, message: 'Không có quyền' });
+      return fail(res, 'Không có quyền', 403);
     }
-
     await FloorPlan.findByIdAndDelete(req.params.id);
+    refreshEngagementSafe(floorPlan.userId);
     res.json({ success: true, message: 'Đã xoá' });
   } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
+    fail(res, error, 500);
   }
 });
 
 // ============================================================
 // CONCEPTS
 // ============================================================
-
 router.post('/concepts', verifyToken, async (req, res) => {
   try {
-    const concept = await Concept.create({
-      ...req.body,
-      userId: req.user.userId
-    });
+    if (!isValidId(req.body.floorPlanId)) return fail(res, 'Thiếu mặt bằng của concept.');
+    const floorPlan = await FloorPlan.findById(req.body.floorPlanId).select('userId');
+    if (!floorPlan) return fail(res, 'Không tìm thấy mặt bằng', 404);
+    if (floorPlan.userId.toString() !== req.user.userId && !isStaff(req.user)) {
+      return fail(res, 'Không có quyền', 403);
+    }
+
+    const data = pick(req.body, ['floorPlanId', 'style', 'mainColors', 'mainMaterials', 'description', 'spaceType']);
+    data.estimatedBudget = Math.max(0, Number(req.body.estimatedBudget) || 0);
+
+    const concept = await Concept.create({ ...data, userId: req.user.userId });
+    refreshEngagementSafe(req.user.userId);
     res.status(201).json({ success: true, data: concept });
   } catch (error) {
-    res.status(400).json({ success: false, message: error.message });
+    fail(res, error);
   }
 });
 
 router.get('/concepts', verifyToken, async (req, res) => {
   try {
-    const filter = ['admin', 'staff'].includes(req.user.role)
-      ? {}
-      : { userId: req.user.userId };
-
-    const concepts = await Concept.find(filter).sort({ createdAt: -1 });
+    const filter = isStaff(req.user) ? {} : { userId: req.user.userId };
+    const concepts = await Concept.find(filter).sort({ createdAt: -1 }).limit(500);
     res.json({ success: true, data: concepts });
   } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
+    fail(res, error, 500);
   }
 });
 
 router.get('/concepts/:id', verifyToken, async (req, res) => {
   try {
+    if (!isValidId(req.params.id)) return fail(res, 'Mã không hợp lệ.');
     const concept = await Concept.findById(req.params.id);
-    if (!concept) return res.status(404).json({ success: false, message: 'Không tìm thấy' });
+    if (!concept) return fail(res, 'Không tìm thấy', 404);
+    if (concept.userId.toString() !== req.user.userId && !isStaff(req.user)) {
+      return fail(res, 'Không có quyền', 403);
+    }
     res.json({ success: true, data: concept });
   } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
+    fail(res, error, 500);
   }
 });
 
 // ============================================================
 // LEADS
 // ============================================================
-
-// Tạo lead (bất kỳ ai có tài khoản)
 router.post('/leads', verifyToken, async (req, res) => {
   try {
-    const lead = await Lead.create({
-      ...req.body,
-      userId: req.user.userId
-    });
+    const data = pick(req.body, ['fullName', 'phone', 'email', 'interestedService', 'message']);
+    if (req.body.floorPlanId) {
+      if (!isValidId(req.body.floorPlanId)) return fail(res, 'Mã mặt bằng không hợp lệ.');
+      const fp = await FloorPlan.findById(req.body.floorPlanId).select('userId');
+      if (!fp || (fp.userId.toString() !== req.user.userId && !isStaff(req.user))) {
+        return fail(res, 'Không có quyền với mặt bằng này', 403);
+      }
+      data.floorPlanId = fp._id;
+    }
+
+    // Trạng thái, người phụ trách, điểm... do hệ thống/nhân viên đặt, khách không tự gửi được
+    const lead = await Lead.create({ ...data, userId: req.user.userId });
+    await refreshEngagementSafe(req.user.userId);
+    processLeadsInBackground(req.user.userId);
+
     res.status(201).json({ success: true, data: lead });
   } catch (error) {
-    res.status(400).json({ success: false, message: error.message });
+    fail(res, error);
   }
 });
 
-// Lấy danh sách lead (chỉ admin/staff)
 router.get('/leads', verifyToken, requireRole('admin', 'staff'), async (req, res) => {
   try {
     const { status, assignedTo } = req.query;
     const filter = {};
-    if (status) filter.status = status;
-    if (assignedTo) filter.assignedTo = assignedTo;
+    if (status && typeof status === 'string') filter.status = status;
+    if (assignedTo && isValidId(assignedTo)) filter.assignedTo = assignedTo;
 
     const leads = await Lead.find(filter)
       .populate('userId', 'username fullName email')
       .populate('assignedTo', 'username fullName')
-      .sort({ 'engagement.score': -1, createdAt: -1 });
+      .sort({ 'engagement.score': -1, createdAt: -1 })
+      .limit(1000);
 
     res.json({ success: true, data: leads });
   } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
+    fail(res, error, 500);
   }
 });
 
-// Cập nhật lead (chỉ admin/staff)
-router.put('/leads/:id', verifyToken, requireRole('admin', 'staff'), async (req, res) => {
+router.get('/leads/:id', verifyToken, requireRole('admin', 'staff'), async (req, res) => {
   try {
-    const updated = await Lead.findByIdAndUpdate(req.params.id, req.body, { new: true });
-    res.json({ success: true, data: updated });
-  } catch (error) {
-    res.status(400).json({ success: false, message: error.message });
-  }
-});
-
-// Thêm ghi chú (chỉ admin/staff)
-router.post('/leads/:id/notes', verifyToken, requireRole('admin', 'staff'), async (req, res) => {
-  try {
-    const lead = await Lead.findById(req.params.id);
-    if (!lead) return res.status(404).json({ success: false, message: 'Không tìm thấy' });
-
-    lead.salesNotes.push({
-      note: req.body.note,
-      author: req.user.username
-    });
-    await lead.save();
-
+    if (!isValidId(req.params.id)) return fail(res, 'Mã không hợp lệ.');
+    const lead = await Lead.findById(req.params.id)
+      .populate('userId', 'username fullName email loginCount lastLoginAt')
+      .populate('assignedTo', 'username fullName');
+    if (!lead) return fail(res, 'Không tìm thấy', 404);
     res.json({ success: true, data: lead });
   } catch (error) {
-    res.status(400).json({ success: false, message: error.message });
+    fail(res, error, 500);
+  }
+});
+
+router.put('/leads/:id', verifyToken, requireRole('admin', 'staff'), async (req, res) => {
+  try {
+    if (!isValidId(req.params.id)) return fail(res, 'Mã không hợp lệ.');
+    const update = pick(req.body, ['status', 'assignedTo', 'interestedService', 'message']);
+    const updated = await Lead.findByIdAndUpdate(req.params.id, update, { new: true, runValidators: true });
+    if (!updated) return fail(res, 'Không tìm thấy', 404);
+    res.json({ success: true, data: updated });
+  } catch (error) {
+    fail(res, error);
+  }
+});
+
+router.post('/leads/:id/notes', verifyToken, requireRole('admin', 'staff'), async (req, res) => {
+  try {
+    if (!isValidId(req.params.id)) return fail(res, 'Mã không hợp lệ.');
+    const note = String(req.body.note || '').trim().slice(0, 2000);
+    if (!note) return fail(res, 'Ghi chú trống.');
+
+    const lead = await Lead.findById(req.params.id);
+    if (!lead) return fail(res, 'Không tìm thấy', 404);
+
+    lead.salesNotes.push({ note, author: req.user.username });
+    await lead.save();
+    res.json({ success: true, data: lead });
+  } catch (error) {
+    fail(res, error);
+  }
+});
+
+// Làm mới tóm tắt AI cho telesale
+router.post('/leads/:id/summary', verifyToken, requireRole('admin', 'staff'), async (req, res) => {
+  try {
+    if (!isValidId(req.params.id)) return fail(res, 'Mã không hợp lệ.');
+    const lead = await Lead.findById(req.params.id);
+    if (!lead) return fail(res, 'Không tìm thấy', 404);
+    const aiSummary = await summarizeLead(lead);
+    res.json({ success: true, data: aiSummary });
+  } catch (error) {
+    fail(res, error, 500);
   }
 });
 
 // ============================================================
-// MATERIALS (chỉ admin/staff)
+// MATERIALS & MARKET PRICES (nội bộ: định mức và giá không công khai)
 // ============================================================
+const MATERIAL_FIELDS = [
+  'name', 'code', 'category', 'unit', 'specification', 'brand', 'origin',
+  'notes', 'isActive', 'normPerM2', 'styleTags', 'spaceTypes'
+];
 
 router.post('/materials', verifyToken, requireRole('admin', 'staff'), async (req, res) => {
   try {
-    const material = await Material.create(req.body);
+    const material = await Material.create(pick(req.body, MATERIAL_FIELDS));
     res.status(201).json({ success: true, data: material });
   } catch (error) {
-    res.status(400).json({ success: false, message: error.message });
+    fail(res, error);
   }
 });
 
-// Danh sách vật tư (ai cũng xem được)
-router.get('/materials', optionalAuth, async (req, res) => {
+router.get('/materials', verifyToken, requireRole('admin', 'staff'), async (req, res) => {
   try {
     const { category, isActive } = req.query;
     const filter = {};
-    if (category) filter.category = category;
+    if (category && typeof category === 'string') filter.category = category;
     if (isActive !== undefined) filter.isActive = isActive === 'true';
 
     const materials = await Material.find(filter).sort({ name: 1 });
     res.json({ success: true, data: materials });
   } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
+    fail(res, error, 500);
   }
 });
 
 router.put('/materials/:id', verifyToken, requireRole('admin', 'staff'), async (req, res) => {
   try {
-    const updated = await Material.findByIdAndUpdate(req.params.id, req.body, { new: true });
+    if (!isValidId(req.params.id)) return fail(res, 'Mã không hợp lệ.');
+    const updated = await Material.findByIdAndUpdate(req.params.id, pick(req.body, MATERIAL_FIELDS), {
+      new: true,
+      runValidators: true
+    });
+    if (!updated) return fail(res, 'Không tìm thấy', 404);
     res.json({ success: true, data: updated });
   } catch (error) {
-    res.status(400).json({ success: false, message: error.message });
+    fail(res, error);
   }
 });
-
-// ============================================================
-// MARKET PRICES (chỉ admin/staff)
-// ============================================================
 
 router.post('/market-prices', verifyToken, requireRole('admin', 'staff'), async (req, res) => {
   try {
-    const price = await MarketPrice.create(req.body);
+    const data = pick(req.body, ['materialId', 'price', 'unit', 'supplier', 'region', 'priceDate', 'source', 'notes']);
+    if (!isValidId(data.materialId)) return fail(res, 'Vật tư không hợp lệ.');
+    const price = await MarketPrice.create(data);
     res.status(201).json({ success: true, data: price });
   } catch (error) {
-    res.status(400).json({ success: false, message: error.message });
+    fail(res, error);
   }
 });
 
-// Lấy giá mới nhất của vật tư
-router.get('/market-prices/:materialId', optionalAuth, async (req, res) => {
+router.get('/market-prices/:materialId', verifyToken, requireRole('admin', 'staff'), async (req, res) => {
   try {
+    if (!isValidId(req.params.materialId)) return fail(res, 'Mã không hợp lệ.');
     const prices = await MarketPrice.find({
       materialId: req.params.materialId,
       isActive: true
-    }).sort({ priceDate: -1 }).limit(10);
+    }).sort({ priceDate: -1 }).limit(20);
 
     res.json({ success: true, data: prices });
   } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
+    fail(res, error, 500);
   }
 });
 
 // ============================================================
 // BOQ (chỉ admin/staff)
 // ============================================================
+function sanitizeItems(items) {
+  return (Array.isArray(items) ? items : [])
+    .filter(it => it && isValidId(it.materialId))
+    .map(it => ({
+      materialId: it.materialId,
+      materialName: String(it.materialName || '').slice(0, 200) || 'Vật tư',
+      unit: String(it.unit || '').slice(0, 30) || '-',
+      quantity: it.quantity,
+      unitPrice: it.unitPrice,
+      notes: String(it.notes || '').slice(0, 300)
+    }));
+}
 
 router.post('/boqs', verifyToken, requireRole('admin', 'staff'), async (req, res) => {
   try {
-    const { items = [], contingency = 0, vat = 0 } = req.body;
-
-    const subtotal = items.reduce((sum, item) => sum + (item.totalPrice || 0), 0);
-    const contingencyAmount = subtotal * (contingency / 100);
-    const vatAmount = (subtotal + contingencyAmount) * (vat / 100);
-    const total = subtotal + contingencyAmount + vatAmount;
+    if (!isValidId(req.body.floorPlanId)) return fail(res, 'Thiếu mặt bằng của dự toán.');
+    const contingencyPct = Number(req.body.contingency) || 0;
+    const vatPct = Number(req.body.vat) || 0;
+    const totals = calcTotals(sanitizeItems(req.body.items), contingencyPct, vatPct);
 
     const boq = await BOQ.create({
-      ...req.body,
-      subtotal,
-      contingency: contingencyAmount,
-      vat: vatAmount,
-      total,
+      floorPlanId: req.body.floorPlanId,
+      title: String(req.body.title || 'Dự toán').slice(0, 200),
+      items: totals.items,
+      contingencyPct,
+      vatPct,
+      subtotal: totals.subtotal,
+      contingency: totals.contingency,
+      vat: totals.vat,
+      total: totals.total,
+      source: 'manual',
       userId: req.user.userId
     });
 
     res.status(201).json({ success: true, data: boq });
   } catch (error) {
-    res.status(400).json({ success: false, message: error.message });
+    fail(res, error);
   }
 });
 
 router.get('/boqs', verifyToken, requireRole('admin', 'staff'), async (req, res) => {
   try {
-    const boqs = await BOQ.find()
-      .populate('floorPlanId', 'projectName')
+    const filter = {};
+    if (req.query.status && typeof req.query.status === 'string') filter.status = req.query.status;
+    const boqs = await BOQ.find(filter)
+      .select('-items')
+      .populate('floorPlanId', 'projectName totalArea address')
       .populate('userId', 'username')
-      .sort({ createdAt: -1 });
+      .sort({ createdAt: -1 })
+      .limit(500);
     res.json({ success: true, data: boqs });
   } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
+    fail(res, error, 500);
   }
 });
 
 router.get('/boqs/:id', verifyToken, requireRole('admin', 'staff'), async (req, res) => {
   try {
+    if (!isValidId(req.params.id)) return fail(res, 'Mã không hợp lệ.');
     const boq = await BOQ.findById(req.params.id)
-      .populate('floorPlanId')
-      .populate('items.materialId');
-    if (!boq) return res.status(404).json({ success: false, message: 'Không tìm thấy' });
+      .populate('floorPlanId', 'projectName totalArea address siteStatus')
+      .populate('approvedBy', 'username');
+    if (!boq) return fail(res, 'Không tìm thấy', 404);
     res.json({ success: true, data: boq });
   } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
+    fail(res, error, 500);
+  }
+});
+
+// Staff chỉnh khối lượng/đơn giá → hệ thống tính lại tổng, đổi nguồn thành "staff-edited"
+router.put('/boqs/:id', verifyToken, requireRole('admin', 'staff'), async (req, res) => {
+  try {
+    if (!isValidId(req.params.id)) return fail(res, 'Mã không hợp lệ.');
+    const boq = await BOQ.findById(req.params.id);
+    if (!boq) return fail(res, 'Không tìm thấy', 404);
+    if (boq.status === 'approved') return fail(res, 'Dự toán đã duyệt, hãy chuyển về "đang xem xét" trước khi sửa.');
+
+    const contingencyPct = req.body.contingencyPct !== undefined ? Number(req.body.contingencyPct) : boq.contingencyPct;
+    const vatPct = req.body.vatPct !== undefined ? Number(req.body.vatPct) : boq.vatPct;
+    const items = req.body.items !== undefined ? sanitizeItems(req.body.items) : boq.items.map(i => i.toObject());
+    const totals = calcTotals(items, contingencyPct, vatPct);
+
+    if (req.body.title) boq.title = String(req.body.title).slice(0, 200);
+    boq.items = totals.items;
+    boq.contingencyPct = contingencyPct;
+    boq.vatPct = vatPct;
+    boq.subtotal = totals.subtotal;
+    boq.contingency = totals.contingency;
+    boq.vat = totals.vat;
+    boq.total = totals.total;
+    boq.source = 'staff-edited';
+    if (boq.status === 'rejected') boq.status = 'draft';
+    await boq.save();
+
+    res.json({ success: true, data: boq });
+  } catch (error) {
+    fail(res, error);
+  }
+});
+
+// Duyệt / từ chối / trả lại. Chỉ nhân viên mới đổi được trạng thái.
+router.put('/boqs/:id/status', verifyToken, requireRole('admin', 'staff'), async (req, res) => {
+  try {
+    if (!isValidId(req.params.id)) return fail(res, 'Mã không hợp lệ.');
+    const status = req.body.status;
+    if (!['draft', 'reviewing', 'approved', 'rejected'].includes(status)) return fail(res, 'Trạng thái không hợp lệ.');
+
+    const boq = await BOQ.findById(req.params.id);
+    if (!boq) return fail(res, 'Không tìm thấy', 404);
+
+    boq.status = status;
+    boq.approvedBy = status === 'approved' ? req.user.userId : null;
+    await boq.save();
+    res.json({ success: true, data: boq });
+  } catch (error) {
+    fail(res, error);
   }
 });
 

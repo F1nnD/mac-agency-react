@@ -1,25 +1,39 @@
 // =============================================================
 // BACKEND SERVER — MAC CONCEPT
 // =============================================================
+// dotenv PHẢI chạy trước mọi require khác: các middleware/service đọc biến môi trường khi được nạp
+require('dotenv').config();
+
 const express = require('express');
 const cors = require('cors');
-const dotenv = require('dotenv');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
-const fs = require('fs');
-const path = require('path');
 const mongoose = require('mongoose');
 const connectDB = require('./src/config/db');
+
+if (!process.env.JWT_SECRET || process.env.JWT_SECRET.length < 16) {
+  console.error('Thiếu JWT_SECRET (tối thiểu 16 ký tự). Xem backend/.env.example');
+  process.exit(1);
+}
+
+// ===== MIDDLEWARE =====
+const { optionalAuth, requireRole, verifyToken, requirePro } = require('./src/middleware/authMiddleware');
+const { checkAIQuota, checkChatQuota, recordUsage } = require('./src/middleware/aiQuotaMiddleware');
+
+// ===== SERVICES =====
+const ai = require('./src/services/aiService');
+const { FREE_CHAT_SYSTEM, PRO_CHAT_SYSTEM, SPACE_TYPE_EN } = require('./src/services/designKnowledge');
+const { buildEstimateForPlan, toPublicEstimate, loadMaterialsWithPrices, pickPrice } = require('./src/services/estimateService');
+
+// ===== ROUTES =====
 const settingsRoutes = require('./src/routes/settingsRoutes');
-
-// ===== MIDDLEWARE AUTH =====
-const { optionalAuth, requirePro, verifyToken, requireRole } = require('./src/middleware/authMiddleware');
-const { checkAIQuota } = require('./src/middleware/aiQuotaMiddleware');
-
-// ===== MODELS =====
-const Project = require('./src/models/Project');
-const Package = require('./src/models/Package');
-const AIUsage = require('./src/models/AIUsage');
+const projectRoutes = require('./src/routes/projectRoutes');
+const packageRoutes = require('./src/routes/packageRoutes');
+const authRoutes = require('./src/routes/authRoutes');
+const dataRoutes = require('./src/routes/dataRoutes');
+const statsRoutes = require('./src/routes/statsRoutes');
+const studioRoutes = require('./src/routes/studioRoutes');
+const userRoutes = require('./src/routes/userRoutes');
 
 // ===== MODEL DRAFT (INLINE) =====
 const draftSchema = new mongoose.Schema({
@@ -33,24 +47,16 @@ const draftSchema = new mongoose.Schema({
 }, { timestamps: true });
 const Draft = mongoose.models.Draft || mongoose.model('Draft', draftSchema);
 
-// ===== ROUTES =====
-const projectRoutes = require('./src/routes/projectRoutes');
-const packageRoutes = require('./src/routes/packageRoutes');
-const authRoutes = require('./src/routes/authRoutes');
-const dataRoutes = require('./src/routes/dataRoutes');
-const statsRoutes = require('./src/routes/statsRoutes');
-
 // ===== INIT =====
-dotenv.config();
 const app = express();
-// THÊM DÒNG NÀY ĐỂ SỬA LỖI RATE LIMIT TRÊN RENDER
-app.set('trust proxy', 1); 
-// 1. CẤU HÌNH CORS
+app.set('trust proxy', 1); // chạy sau proxy của Render
+
+// 1. CORS
 const defaultOrigins = 'http://localhost:5173,http://localhost:3000,http://localhost:5174,https://moreactisticconcept.onrender.com';
 const allowedOrigins = (process.env.CORS_ORIGINS || defaultOrigins).split(',').map(o => o.trim()).filter(Boolean);
 
 app.use(cors({
-  origin: function (origin, callback) {
+  origin(origin, callback) {
     if (!origin) return callback(null, true);
     if (allowedOrigins.includes(origin)) return callback(null, true);
     console.log('CORS blocked origin:', origin);
@@ -63,215 +69,215 @@ app.use(cors({
 
 // 2. MIDDLEWARE CƠ BẢN
 app.use(helmet({ crossOriginResourcePolicy: false }));
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ limit: '10mb', extended: true }));
-app.use('/api/settings', settingsRoutes);
+// Chỉ route dữ liệu (có ảnh mặt bằng dạng base64) mới cần body lớn; còn lại giới hạn nhỏ
+app.use('/api/data', express.json({ limit: '16mb' }));
+app.use(express.json({ limit: '1mb' }));
+app.use(express.urlencoded({ limit: '1mb', extended: true }));
 
 // 3. RATE LIMIT
-app.use('/api', rateLimit({ windowMs: 15 * 60 * 1000, max: 500 }));
-app.use('/api/auth/login', rateLimit({ windowMs: 15 * 60 * 1000, max: 20 }));
-app.use('/api/ai-free', rateLimit({ windowMs: 60 * 1000, max: 15 }));
-app.use('/api/ai-pro', rateLimit({ windowMs: 60 * 1000, max: 15 }));
-app.use('/api/ai-admin', rateLimit({ windowMs: 60 * 1000, max: 30 }));
+const limiter = (windowMs, max) => rateLimit({ windowMs, max, standardHeaders: true, legacyHeaders: false });
+app.use('/api', limiter(15 * 60 * 1000, 500));
+app.use('/api/auth/login', limiter(15 * 60 * 1000, 20));
+app.use('/api/auth/register', limiter(60 * 60 * 1000, 20));
+app.use('/api/ai-free', limiter(60 * 1000, 15));
+app.use('/api/ai-pro', limiter(60 * 1000, 15));
+app.use('/api/ai-admin', limiter(60 * 1000, 30));
+app.use('/api/studio/render', limiter(60 * 1000, 6));
 
 // 4. MOUNT ROUTES
+app.use('/api/settings', settingsRoutes);
 app.use('/api/projects', projectRoutes);
 app.use('/api/packages', packageRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/data', dataRoutes);
 app.use('/api/stats', statsRoutes);
+app.use('/api/studio', studioRoutes);
+app.use('/api/users', userRoutes);
 
-// 5. KẾT NỐI DB & SEED DATA (Giữ nguyên logic cũ)
+// 5. KẾT NỐI DB
 connectDB().then(() => console.log('DB Ready')).catch(err => console.error('Lỗi DB:', err.message));
-
-// 6. CÁC ROUTE INLINE KHÁC
-app.get('/api/packages', async (req, res) => {
-  try {
-    const packages = await Package.find();
-    const formattedPriceList = {};
-    packages.forEach(pkg => { formattedPriceList[pkg.key] = { name: pkg.name, price: pkg.price }; });
-    res.json(formattedPriceList);
-  } catch (error) { res.status(500).json({ message: error.message }); }
-});
 
 app.get('/api/drafts', async (req, res) => {
   try { res.json(await Draft.find()); } catch (error) { res.status(500).json({ message: error.message }); }
 });
 
 // =============================================================
-// TẦNG 1: AI FREE (Khách Thường - 1 ảnh/3 ngày)
+// TẦNG 1: AI THƯỜNG (miễn phí) — tư vấn thiết kế, khách vãng lai cũng dùng được (có giới hạn/ngày)
 // =============================================================
-app.post('/api/ai-free', optionalAuth, async (req, res) => {
-  // Logic chat cơ bản cho Free (Không qua checkQuota ảnh)
+const NO_AI_REPLY =
+  'Trợ lý AI đang nghỉ một chút. Bạn có thể dùng AI Studio để nhập mặt bằng và concept, đội ngũ MAC sẽ tư vấn chi tiết cho bạn.';
+
+app.post('/api/ai-free', optionalAuth, checkChatQuota, async (req, res) => {
+  const { userMessage, chatHistory } = req.body || {};
+  if (typeof userMessage !== 'string' || !userMessage.trim()) {
+    return res.status(400).json({ success: false, message: 'Nhập câu hỏi.' });
+  }
+
   try {
-    const { userMessage, chatHistory } = req.body;
-    if (!userMessage) return res.status(400).json({ success: false, message: 'Nhập câu hỏi.' });
+    let replyText = NO_AI_REPLY;
+    let ok = false;
+    let errorMessage = '';
 
-    const apiKey = process.env.GEMINI_API_KEY;
-    let replyText = '';
-
-    if (apiKey) {
-      const systemPrompt = `Bạn là nhân viên tư vấn của MAC Concept. Hãy trả lời ngắn gọn, thân thiện. Nếu khách muốn thiết kế, hãy khuyên họ nâng cấp lên gói Pro để được AI vẽ phối cảnh.`;
-      let contents = [];
-      if (chatHistory) {
-        chatHistory.slice(-3).forEach(msg => contents.push({ role: msg.role === 'user' ? 'user' : 'model', parts: [{ text: msg.text }] }));
+    if (ai.isConfigured()) {
+      try {
+        const out = await ai.chatReply({
+          tier: req.aiTier,
+          system: FREE_CHAT_SYSTEM,
+          history: chatHistory,
+          message: userMessage,
+          maxHistory: 6
+        });
+        replyText = out.text;
+        ok = true;
+      } catch (error) {
+        errorMessage = error.message;
+        console.warn('[ai-free]', error.message);
       }
-      contents.push({ role: 'user', parts: [{ text: userMessage }] });
+    }
 
-      const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
-      const apiRes = await fetch(url, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ systemInstruction: { parts: [{ text: systemPrompt }] }, contents })
+    await recordUsage(req, { endpoint: '/api/ai-free', requestType: 'chat', success: ok, errorMessage, userMessage });
+    return res.json({ success: true, tier: 'free', replyText, isPureChat: true });
+  } catch (error) {
+    console.error('Lỗi AI thường:', error);
+    return res.status(500).json({ success: false, message: 'Lỗi AI.' });
+  }
+});
+
+// =============================================================
+// TẦNG 2: AI PRO — chat + tạo nhanh phối cảnh từ form (Pro / staff / admin)
+// =============================================================
+const proGate = (req, res, next) => (req.body?.style ? checkAIQuota(req, res, next) : checkChatQuota(req, res, next));
+
+app.post('/api/ai-pro', optionalAuth, requirePro, proGate, async (req, res) => {
+  try {
+    const { userMessage, style, area, spaceType, chatHistory } = req.body || {};
+
+    // --- Tạo nhanh phối cảnh từ form ---
+    if (style) {
+      const numArea = Math.min(5000, Math.max(1, Number(area) || 100));
+      const space = SPACE_TYPE_EN[spaceType] ? spaceType : 'Khác';
+      const side = Math.round(Math.sqrt(numArea) * 10) / 10;
+      const floorPlan = {
+        width: side, length: side, totalArea: numArea, siteStatus: 'dat-trong', city: 'TP.HCM', projectName: 'Phối cảnh nhanh'
+      };
+      const concept = { style: String(style).slice(0, 40), spaceType: space, mainColors: [], mainMaterials: [] };
+
+      const prompt = ai.buildFallbackImagePrompt(floorPlan, concept);
+      const aiImageUrl = ai.buildImageUrl({ prompt, seed: Math.floor(Math.random() * 2_000_000_000) });
+      const estimate = await buildEstimateForPlan(floorPlan, concept);
+      const isStaffUser = ['admin', 'staff'].includes(req.user.role);
+
+      await recordUsage(req, {
+        endpoint: '/api/ai-pro', requestType: 'render', generatedImage: true, userMessage: `${space} - ${style} - ${numArea}m2`
       });
 
-      if (apiRes.ok) {
-        const data = await apiRes.json();
-        replyText = data.candidates[0].content.parts[0].text;
-      }
-    }
-    return res.json({ success: true, tier: 'free', replyText: replyText || 'Vui lòng thử lại sau.', isPureChat: true });
-  } catch (error) { return res.status(500).json({ success: false, message: 'Lỗi AI.' }); }
-});
-
-// =============================================================
-// TẦNG 2: AI PRO (Khách Trả Phí - 3 ảnh/ngày)
-// =============================================================
-app.post('/api/ai-pro', optionalAuth, checkAIQuota, async (req, res) => {
-  try {
-    const { userMessage, style: reqStyle, area: reqArea, spaceType: reqSpaceType, chatHistory } = req.body;
-
-    let spaceType = reqSpaceType || 'Công trình';
-    let style = reqStyle || 'Industrial';
-    let numArea = Number(reqArea) || 100;
-    let replyText = '';
-    let spaceTypeEn = 'Building';
-    let isArchitectRequest = reqStyle ? true : false; // Nếu từ Form gửi lên là muốn vẽ
-
-    // Nếu là Chat, để AI tự phân tích
-    if (userMessage && !reqStyle) {
-      const apiKey = process.env.GEMINI_API_KEY;
-      if (apiKey) {
-        const systemPrompt = `Bạn là KTS của MAC Concept. Trò chuyện tự nhiên. Nếu khách muốn vẽ, hãy trả về JSON:
-{ "replyText": "câu trả lời", "isArchitectRequest": boolean, "spaceTypeVi": "tên", "spaceTypeEn": "tên tiếng Anh", "style": "phong cách", "area": number }`;
-        
-        let contents = [];
-        if (chatHistory) {
-          chatHistory.slice(-5).forEach(msg => contents.push({ role: msg.role === 'user' ? 'user' : 'model', parts: [{ text: msg.text }] }));
-        }
-        contents.push({ role: 'user', parts: [{ text: userMessage }] });
-
-        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
-        const apiRes = await fetch(url, {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ systemInstruction: { parts: [{ text: systemPrompt }] }, contents })
-        });
-
-        if (apiRes.ok) {
-          const data = await apiRes.json();
-          let text = data.candidates[0].content.parts[0].text;
-          try {
-            const parsed = JSON.parse(text.replace(/```json/g, '').replace(/```/g, '').trim());
-            replyText = parsed.replyText;
-            isArchitectRequest = parsed.isArchitectRequest;
-            if (parsed.spaceTypeVi) spaceType = parsed.spaceTypeVi;
-            if (parsed.spaceTypeEn) spaceTypeEn = parsed.spaceTypeEn;
-            if (parsed.style) style = parsed.style;
-            if (parsed.area) numArea = parsed.area;
-          } catch (e) { replyText = text; isArchitectRequest = false; }
-        }
-      }
+      return res.json({
+        success: true,
+        tier: req.aiTier,
+        replyText: `Đã tạo phối cảnh ${space.toLowerCase()} phong cách ${style}, diện tích ${numArea} m².`,
+        style, spaceType: space, area: numArea, aiImageUrl,
+        estimate: isStaffUser ? estimate : toPublicEstimate(estimate),
+        remaining: Math.max(0, (req.aiRemaining ?? 1) - 1),
+        isPureChat: false
+      });
     }
 
-    if (!replyText) replyText = `Dạ, tôi đã ghi nhận yêu cầu.`;
-
-    // Nếu chỉ chat
-    if (!isArchitectRequest) {
-      return res.json({ success: true, tier: 'pro', replyText, remaining: req.aiRemaining, isPureChat: true });
+    // --- Chat ---
+    if (typeof userMessage !== 'string' || !userMessage.trim()) {
+      return res.status(400).json({ success: false, message: 'Nhập câu hỏi.' });
     }
 
-    // Nếu vẽ
-    let basePricePerM2 = 380000;
-    if (spaceType.includes('Nhà Ở')) basePricePerM2 = 350000;
-    if (spaceType.includes('Biệt Thự')) basePricePerM2 = 480000;
-    const baseCost = numArea * basePricePerM2;
-    const boqCost = baseCost * 0.05;
-    const totalCost = baseCost + boqCost;
-
-    const promptText = `photorealistic 8k architectural visualization, ${spaceTypeEn}, ${style} style, professional photography, cinematic lighting`;
-    const aiImageUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(promptText)}?model=flux-realism&width=1024&height=768&nologo=true`;
-
-    // Ghi log AIUsage (để đếm quota)
-    await AIUsage.create({
-      userId: req.user?.userId || null,
-      tier: req.aiTier,
-      endpoint: '/api/ai-pro',
-      requestType: 'render',
-      generatedImage: true,
-      success: true,
-    }).catch(() => {});
-
-    return res.json({
-      success: true, tier: 'pro', replyText, style, spaceType, area: numArea, basePricePerM2, baseCost, boqCost, totalCost, aiImageUrl, remaining: req.aiRemaining, isPureChat: false
-    });
-  } catch (error) { return res.status(500).json({ success: false, message: 'Lỗi AI Pro.' }); }
-});
-
-// =============================================================
-// TẦNG 3: AI ADMIN (Đầu chuỗi - Chuyên sâu)
-// =============================================================
-app.post('/api/ai-admin', optionalAuth, requireRole('admin', 'staff'), async (req, res) => {
-  try {
-    const { userMessage, chatHistory } = req.body;
-    if (!userMessage) return res.status(400).json({ success: false, message: 'Nhập câu hỏi.' });
-
-    const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) return res.status(500).json({ success: false, message: 'Thiếu GEMINI_API_KEY trên server.' });
-
-    const systemPrompt = `Bạn là KTS Trưởng của MAC Concept. Tư vấn kết cấu, vật liệu, dự toán BOQ chuyên sâu.`;
-    let contents = [];
-    if (chatHistory) {
-      chatHistory.slice(-10).forEach(msg => contents.push({ role: msg.role === 'user' ? 'user' : 'model', parts: [{ text: msg.text }] }));
-    }
-    contents.push({ role: 'user', parts: [{ text: userMessage }] });
-
-    // Danh sách các model dự phòng (thử lần lượt từ tốt nhất đến ổn định nhất)
-    const models = ['gemini-3.8-flash', 'gemini-3.5-flash', 'gemini-2.5-flash'];
-    let replyText = '';
-    let lastError = '';
-
-    for (const model of models) {
+    let replyText = NO_AI_REPLY;
+    let ok = false;
+    let errorMessage = '';
+    if (ai.isConfigured()) {
       try {
-        const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
-        const apiRes = await fetch(url, {
-          method: 'POST', 
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ systemInstruction: { parts: [{ text: systemPrompt }] }, contents })
+        const internal = ['admin', 'staff'].includes(req.user.role);
+        const out = await ai.chatReply({
+          tier: req.aiTier,
+          system: internal ? PRO_CHAT_SYSTEM : FREE_CHAT_SYSTEM,
+          history: chatHistory,
+          message: userMessage,
+          maxHistory: 8
         });
-
-        const data = await apiRes.json();
-
-        if (apiRes.ok && data.candidates) {
-          replyText = data.candidates[0].content.parts[0].text;
-          break; // Thành công thì dừng vòng lặp
-        } else {
-          lastError = data.error?.message || 'Lỗi không xác định';
-          console.log(`Model ${model} lỗi, thử model tiếp theo...`);
-        }
-      } catch (err) {
-        lastError = err.message;
+        replyText = out.text;
+        ok = true;
+      } catch (error) {
+        errorMessage = error.message;
+        console.warn('[ai-pro]', error.message);
       }
     }
+    await recordUsage(req, { endpoint: '/api/ai-pro', requestType: 'chat', success: ok, errorMessage, userMessage });
+    return res.json({ success: true, tier: req.aiTier, replyText, isPureChat: true });
+  } catch (error) {
+    console.error('Lỗi AI Pro:', error);
+    return res.status(500).json({ success: false, message: 'Lỗi AI Pro.' });
+  }
+});
 
-    if (!replyText) {
-      return res.status(500).json({ success: false, message: `Hệ thống AI đang quá tải. Vui lòng thử lại sau ít phút. (${lastError})` });
-    }
+// =============================================================
+// TẦNG 3: AI NỘI BỘ (admin / staff) — có đọc dữ liệu vật tư và giá của MAC
+// =============================================================
+async function buildInternalContext() {
+  try {
+    const entries = await loadMaterialsWithPrices();
+    const lines = entries.slice(0, 40).map(({ material, prices }) => {
+      const p = pickPrice(prices);
+      const price = p ? `${p.unitPrice.toLocaleString('vi-VN')} đ/${material.unit} (khoảng ${p.low.toLocaleString('vi-VN')} - ${p.high.toLocaleString('vi-VN')}, báo giá ${new Date(p.latestDate).toLocaleDateString('vi-VN')})` : 'chưa có báo giá';
+      return `- ${material.code} ${material.name}: định mức ${material.normPerM2} ${material.unit}/m², giá ${price}`;
+    });
+    if (!lines.length) return '';
+    return `\n\nDỮ LIỆU VẬT TƯ NỘI BỘ CỦA MAC (ưu tiên dùng khi dự toán, ghi rõ nguồn):\n${lines.join('\n')}`;
+  } catch (error) {
+    console.warn('[ai-admin] Không đọc được dữ liệu vật tư:', error.message);
+    return '';
+  }
+}
 
-    return res.json({ success: true, tier: 'admin', replyText, isPureChat: true });
-  } catch (error) { 
-    return res.status(500).json({ success: false, message: error.message }); 
+app.post('/api/ai-admin', optionalAuth, requireRole('admin', 'staff'), async (req, res) => {
+  const { userMessage, chatHistory } = req.body || {};
+  if (typeof userMessage !== 'string' || !userMessage.trim()) {
+    return res.status(400).json({ success: false, message: 'Nhập câu hỏi.' });
+  }
+  if (!ai.isConfigured()) {
+    return res.status(500).json({ success: false, message: 'Thiếu GEMINI_API_KEY trên server.' });
+  }
+
+  req.aiTier = req.user.role === 'admin' ? 'admin' : 'staff';
+  try {
+    const system = PRO_CHAT_SYSTEM + (await buildInternalContext());
+    const out = await ai.chatReply({
+      tier: req.aiTier,
+      system,
+      history: chatHistory,
+      message: userMessage,
+      maxHistory: 10
+    });
+    await recordUsage(req, { endpoint: '/api/ai-admin', requestType: 'chat', userMessage });
+    return res.json({ success: true, tier: req.aiTier, replyText: out.text, isPureChat: true });
+  } catch (error) {
+    await recordUsage(req, { endpoint: '/api/ai-admin', requestType: 'chat', success: false, errorMessage: error.message, userMessage });
+    return res.status(500).json({
+      success: false,
+      message: `Hệ thống AI đang quá tải. Vui lòng thử lại sau ít phút. (${error.message})`
+    });
   }
 });
 
 app.get('/', (req, res) => res.send('API MAC Running...'));
+app.get('/api/health', (req, res) => res.json({ ok: true, ai: ai.isConfigured() ? 'gemini' : 'rules-only' }));
+
+// Lỗi chưa bắt (vd CORS) không được làm lộ stack trace
+app.use((err, req, res, next) => { // eslint-disable-line no-unused-vars
+  if (err?.message === 'CORS blocked') return res.status(403).json({ success: false, message: 'Nguồn truy cập không được phép.' });
+  if (err?.type === 'entity.too.large') return res.status(413).json({ success: false, message: 'Dữ liệu gửi lên quá lớn.' });
+  console.error('Lỗi không xác định:', err);
+  res.status(500).json({ success: false, message: 'Lỗi hệ thống.' });
+});
+
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => console.log(`Server on port ${PORT}`));
+if (require.main === module) {
+  app.listen(PORT, () => console.log(`Server on port ${PORT}`));
+}
+
+module.exports = app;

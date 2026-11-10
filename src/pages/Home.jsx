@@ -192,7 +192,7 @@ export default function Home() {
       ]);
     } catch (err) {
       console.error('Lỗi AI Form:', err);
-      if (err.message.includes('nâng cấp') || err.message.includes('429')) {
+      if (err.status === 429 || err.message.includes('nâng cấp') || err.message.includes('429')) {
         alert(err.message);
       } else {
         alert(err.message || 'Không thể kết nối AI. Vui lòng thử lại.');
@@ -236,7 +236,7 @@ export default function Home() {
       console.error('Lỗi AI Chat:', err);
       
       // Bắt lỗi hết Quota (429)
-      if (err.message.includes('nâng cấp') || err.message.includes('429')) {
+      if (err.status === 429 || err.message.includes('nâng cấp') || err.message.includes('429')) {
         setChatMessages([
           ...updatedHistory, 
           { role: 'ai', text: err.message, isUpgradePrompt: true }

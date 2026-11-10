@@ -1,41 +1,72 @@
 // backend/src/middleware/authMiddleware.js
 const jwt = require('jsonwebtoken');
+const User = require('../models/User');
+
+// =============================================================
+// Quyền hiệu lực: customer_pro hết hạn (proExpiresAt) → customer_free
+// =============================================================
+function effectiveRole(user) {
+  if (user.role === 'customer_pro' && user.proExpiresAt && user.proExpiresAt < new Date()) {
+    return 'customer_free';
+  }
+  return user.role;
+}
+
+function extractToken(req) {
+  const authHeader = req.headers.authorization || '';
+  return authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : null;
+}
+
+// Giải mã token và đọc quyền MỚI NHẤT từ DB để:
+//  - tài khoản bị khoá có hiệu lực ngay (không đợi token hết hạn)
+//  - đổi quyền (nâng Pro, cấp staff...) có hiệu lực ngay
+async function resolveUser(token) {
+  const decoded = jwt.verify(token, process.env.JWT_SECRET);
+  const user = await User.findById(decoded.userId).select('username role isActive proExpiresAt');
+  if (!user) {
+    const e = new Error('Người dùng không tồn tại');
+    e.name = 'UserGone';
+    throw e;
+  }
+  if (!user.isActive) {
+    const e = new Error('Tài khoản đã bị khoá');
+    e.name = 'InactiveUser';
+    throw e;
+  }
+  return {
+    userId: user._id.toString(),
+    username: user.username,
+    role: effectiveRole(user)
+  };
+}
 
 // =============================================================
 // VERIFY TOKEN — Bắt buộc đăng nhập
 // =============================================================
-const verifyToken = (req, res, next) => {
-  try {
-    const authHeader = req.headers.authorization || '';
-    const token = authHeader.startsWith('Bearer ')
-      ? authHeader.slice(7).trim()
-      : null;
-
-    if (!token) {
-      return res.status(401).json({
-        success: false,
-        message: 'Thiếu token xác thực. Vui lòng đăng nhập lại.'
-      });
-    }
-
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    req.user = {
-      userId: decoded.userId,
-      username: decoded.username,
-      role: decoded.role
-    };
-    next();
-  } catch (error) {
-    if (error.name === 'TokenExpiredError') {
-      return res.status(401).json({
-        success: false,
-        message: 'Token đã hết hạn. Vui lòng đăng nhập lại.'
-      });
-    }
+const verifyToken = async (req, res, next) => {
+  const token = extractToken(req);
+  if (!token) {
     return res.status(401).json({
       success: false,
-      message: 'Token không hợp lệ.'
+      message: 'Thiếu token xác thực. Vui lòng đăng nhập lại.'
     });
+  }
+
+  try {
+    req.user = await resolveUser(token);
+    return next();
+  } catch (error) {
+    if (error.name === 'TokenExpiredError') {
+      return res.status(401).json({ success: false, message: 'Token đã hết hạn. Vui lòng đăng nhập lại.' });
+    }
+    if (error.name === 'InactiveUser') {
+      return res.status(401).json({ success: false, message: 'Tài khoản đã bị khoá. Vui lòng liên hệ quản trị viên.' });
+    }
+    if (error.name === 'UserGone' || error.name === 'JsonWebTokenError' || error.name === 'NotBeforeError') {
+      return res.status(401).json({ success: false, message: 'Token không hợp lệ.' });
+    }
+    console.error('Lỗi xác thực:', error.message);
+    return res.status(500).json({ success: false, message: 'Lỗi xác thực hệ thống.' });
   }
 };
 
@@ -65,37 +96,24 @@ const requireRole = (...allowedRoles) => {
 
 // =============================================================
 // OPTIONAL AUTH — Cho phép khách vãng lai đi qua
-// Nếu có token hợp lệ → gán req.user
-// Nếu không có token → req.user = null, vẫn cho đi tiếp
+// Token hợp lệ → gán req.user, ngược lại req.user = null
 // =============================================================
-const optionalAuth = (req, res, next) => {
-  try {
-    const authHeader = req.headers.authorization || '';
-    const token = authHeader.startsWith('Bearer ')
-      ? authHeader.slice(7).trim()
-      : null;
-
-    if (!token) {
-      req.user = null;
-      return next();
-    }
-
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    req.user = {
-      userId: decoded.userId,
-      username: decoded.username,
-      role: decoded.role
-    };
-    next();
-  } catch (error) {
-    // Token sai/hết hạn → coi như khách vãng lai, không chặn
+const optionalAuth = async (req, res, next) => {
+  const token = extractToken(req);
+  if (!token) {
     req.user = null;
-    next();
+    return next();
   }
+  try {
+    req.user = await resolveUser(token);
+  } catch {
+    req.user = null;
+  }
+  next();
 };
 
 // =============================================================
-// REQUIRE PRO — Chỉ cho phép role Pro trở lên
+// REQUIRE PRO — Chỉ admin / staff / customer_pro (còn hạn)
 // Dùng cho endpoint AI Pro
 // =============================================================
 const requirePro = (req, res, next) => {
@@ -111,19 +129,17 @@ const requirePro = (req, res, next) => {
   if (!allowedRoles.includes(req.user.role)) {
     return res.status(403).json({
       success: false,
-      message: 'Tính năng AI Pro chỉ dành cho khách hàng Pro. Vui lòng nâng cấp gói.'
+      message: 'Tính năng AI Pro chỉ dành cho nhân viên MAC. Bạn có thể dùng AI Studio và trợ lý AI thường.'
     });
   }
 
   next();
 };
 
-// =============================================================
-// EXPORTS — 4 middleware
-// =============================================================
 module.exports = {
   verifyToken,
   requireRole,
   optionalAuth,
-  requirePro
+  requirePro,
+  effectiveRole
 };

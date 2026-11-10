@@ -52,4 +52,8 @@ const AIUsageSchema = new mongoose.Schema({
   }
 }, { timestamps: true });
 
+// Truy vấn quota luôn lọc theo (userId hoặc IP) + khoảng thời gian
+AIUsageSchema.index({ userId: 1, requestType: 1, usedAt: -1 });
+AIUsageSchema.index({ ipAddress: 1, requestType: 1, usedAt: -1 });
+
 module.exports = mongoose.model('AIUsage', AIUsageSchema);

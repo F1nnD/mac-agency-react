@@ -50,7 +50,10 @@ async function request(path, options = {}) {
   }
 
   if (!res.ok) {
-    throw new Error(data?.message || `Lỗi ${res.status}`);
+    const err = new Error(data?.message || `Lỗi ${res.status}`);
+    err.status = res.status;
+    err.data = data;
+    throw err;
   }
 
   return data;
@@ -148,15 +151,37 @@ export const dataApi = {
   getMarketPrices: (materialId) => api.get(`/api/data/market-prices/${materialId}`),
 
   createBOQ: (data) => api.post('/api/data/boqs', data),
-  getBOQs: () => api.get('/api/data/boqs'),
-  getBOQ: (id) => api.get(`/api/data/boqs/${id}`)
+  getBOQs: (params = '') => api.get(`/api/data/boqs${params}`),
+  getBOQ: (id) => api.get(`/api/data/boqs/${id}`),
+  updateBOQ: (id, data) => api.put(`/api/data/boqs/${id}`, data),
+  setBOQStatus: (id, status) => api.put(`/api/data/boqs/${id}/status`, { status })
+};
+
+// =============================================================
+// AI STUDIO: diễn hoạ từ mặt bằng + concept
+// =============================================================
+export const studioApi = {
+  render: ({ floorPlanId, conceptId }) => api.post('/api/studio/render', { floorPlanId, conceptId }),
+  quota: () => api.get('/api/studio/quota'),
+  renders: (all = false) => api.get(`/api/studio/renders${all ? '?all=true' : ''}`)
+};
+
+export const statsApi = {
+  funnel: (days = 30) => api.get(`/api/stats/funnel?days=${days}`)
+};
+
+export const usersApi = {
+  list: (params = '') => api.get(`/api/users${params}`),
+  create: (data) => api.post('/api/users', data),
+  update: (id, data) => api.put(`/api/users/${id}`, data)
 };
 
 export const leadsApi = {
   getAll: (params = '') => api.get(`/api/data/leads${params}`),
   getOne: (id) => api.get(`/api/data/leads/${id}`),
   update: (id, data) => api.put(`/api/data/leads/${id}`, data),
-  addNote: (id, note) => api.post(`/api/data/leads/${id}/notes`, { note })
+  addNote: (id, note) => api.post(`/api/data/leads/${id}/notes`, { note }),
+  summarize: (id) => api.post(`/api/data/leads/${id}/summary`, {})
 };
 
 export { API_BASE_URL };

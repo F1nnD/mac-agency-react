@@ -7,8 +7,30 @@ html, body, #root {
   width: 100% !important;
   max-width: none !important;
   min-height: 100vh;
+  min-height: 100dvh; /* thanh địa chỉ điện thoại co giãn */
   background-color: #0b0b0b;
   overflow-x: hidden;
+}
+
+/* Chống chữ tự phóng to khi xoay ngang, tắt lớp sáng khi chạm trên di động */
+html { -webkit-text-size-adjust: 100%; -webkit-tap-highlight-color: transparent; scroll-padding-top: 5rem; }
+
+/* Ô nhập >= 16px trên điện thoại để iOS không tự zoom khi chạm vào */
+@media (max-width: 767px) {
+  input, select, textarea { font-size: 16px !important; }
+}
+
+/* Viền focus rõ cho người dùng bàn phím */
+:focus-visible { outline: 2px solid #fbbf24; outline-offset: 2px; }
+
+/* Tôn trọng người dùng tắt hiệu ứng chuyển động */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
 
 /* Tinh chỉnh thanh cuộn siêu mảnh tinh tế của MAC */

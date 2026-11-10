@@ -22,6 +22,21 @@ export default function LeadDetailModal({ lead, onClose, onUpdate }) {
   const [note, setNote] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [aiSummary, setAiSummary] = useState(lead.aiSummary || null);
+  const [summarizing, setSummarizing] = useState(false);
+
+  const handleSummarize = async () => {
+    setSummarizing(true);
+    setError('');
+    try {
+      const res = await leadsApi.summarize(lead._id);
+      setAiSummary(res.data);
+    } catch (err) {
+      setError(err.message || 'Không tạo được tóm tắt.');
+    } finally {
+      setSummarizing(false);
+    }
+  };
 
   const handleStatusChange = async (newStatus) => {
     try {
@@ -78,6 +93,47 @@ export default function LeadDetailModal({ lead, onClose, onUpdate }) {
 
         {/* BODY */}
         <div className="p-6 space-y-6 text-left">
+
+          {/* TÓM TẮT AI CHO TELESALE */}
+          <div>
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-[10px] uppercase tracking-widest text-white/40 font-bold">Tóm tắt AI cho telesale</h3>
+              <button
+                onClick={handleSummarize}
+                disabled={summarizing}
+                className="text-[10px] font-bold uppercase tracking-wider text-amber-400 border border-amber-400/30 px-3 py-1.5 rounded-lg hover:bg-amber-400/10 transition-all disabled:opacity-50"
+              >
+                {summarizing ? 'Đang tạo...' : aiSummary ? 'Làm mới' : 'Tạo tóm tắt'}
+              </button>
+            </div>
+            {aiSummary ? (
+              <div className="bg-amber-400/5 border border-amber-400/20 rounded-xl p-4 space-y-3 text-xs">
+                <p className="text-neutral-200 leading-relaxed">{aiSummary.summary}</p>
+                {aiSummary.talkingPoints?.length > 0 && (
+                  <ul className="space-y-1.5">
+                    {aiSummary.talkingPoints.map((t, i) => (
+                      <li key={i} className="text-neutral-400 leading-relaxed">• {t}</li>
+                    ))}
+                  </ul>
+                )}
+                {aiSummary.openingScript && (
+                  <div className="bg-black/40 border border-white/5 rounded-lg p-3">
+                    <p className="text-[9px] uppercase tracking-widest text-white/30 font-bold mb-1">Gợi ý mở đầu cuộc gọi</p>
+                    <p className="text-neutral-300 italic leading-relaxed">"{aiSummary.openingScript}"</p>
+                  </div>
+                )}
+                {aiSummary.nextAction && (
+                  <p className="text-emerald-400 font-semibold">Việc tiếp theo: {aiSummary.nextAction}</p>
+                )}
+                <p className="text-[9px] text-gray-600">
+                  {aiSummary.source === 'gemini' ? 'Tạo bởi AI' : 'Tạo theo quy tắc từ dữ liệu khách'}
+                  {aiSummary.generatedAt && ` · ${new Date(aiSummary.generatedAt).toLocaleString('vi-VN')}`}
+                </p>
+              </div>
+            ) : (
+              <p className="text-[11px] text-gray-600">Chưa có tóm tắt. Nhấn "Tạo tóm tắt" để AI gom thông tin mặt bằng, concept, ngân sách của khách.</p>
+            )}
+          </div>
 
           {/* LIÊN HỆ */}
           <div>

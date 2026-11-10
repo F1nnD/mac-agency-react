@@ -21,15 +21,37 @@ export default function FloorPlanForm({ onSuccess, initialData = null }) {
     setForm(prev => ({ ...prev, [field]: value }));
   };
 
-  const handleImageUpload = (files) => {
-    const fileArray = Array.from(files).slice(0, 5);
-    fileArray.forEach(file => {
+  // Nén ảnh ngay trên trình duyệt (tối đa 1280px, JPEG) để tải nhanh và không làm nặng database
+  const compressImage = (file) =>
+    new Promise((resolve) => {
+      if (!file.type.startsWith('image/')) return resolve(null);
       const reader = new FileReader();
-      reader.onloadend = () => {
-        setImages(prev => [...prev, reader.result]);
+      reader.onerror = () => resolve(null);
+      reader.onload = () => {
+        const img = new Image();
+        img.onerror = () => resolve(null);
+        img.onload = () => {
+          const MAX = 1280;
+          const scale = Math.min(1, MAX / Math.max(img.width, img.height));
+          const canvas = document.createElement('canvas');
+          canvas.width = Math.round(img.width * scale);
+          canvas.height = Math.round(img.height * scale);
+          canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+          resolve(canvas.toDataURL('image/jpeg', 0.8));
+        };
+        img.src = reader.result;
       };
       reader.readAsDataURL(file);
     });
+
+  const handleImageUpload = async (files) => {
+    const room = Math.max(0, 5 - images.length);
+    const picked = Array.from(files).slice(0, room);
+    const results = (await Promise.all(picked.map(compressImage))).filter(Boolean);
+    if (results.length < picked.length) {
+      setError('Một số tệp không phải ảnh hợp lệ nên đã được bỏ qua.');
+    }
+    setImages(prev => [...prev, ...results].slice(0, 5));
   };
 
   const removeImage = (index) => {

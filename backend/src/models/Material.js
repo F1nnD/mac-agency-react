@@ -59,6 +59,26 @@ const MaterialSchema = new mongoose.Schema({
     default: ''
   },
 
+  // Định mức: khối lượng vật tư cần cho 1 m² sàn xây dựng (cùng đơn vị `unit`).
+  // = 0 nghĩa là vật tư này không tham gia dự toán sơ bộ tự động.
+  normPerM2: {
+    type: Number,
+    default: 0,
+    min: 0
+  },
+
+  // Chỉ đưa vào dự toán khi concept thuộc các style này (để trống = áp dụng mọi style)
+  styleTags: [{
+    type: String,
+    trim: true
+  }],
+
+  // Chỉ áp dụng cho các loại công trình này (để trống = áp dụng mọi loại)
+  spaceTypes: [{
+    type: String,
+    trim: true
+  }],
+
   // Ghi chú
   notes: {
     type: String,

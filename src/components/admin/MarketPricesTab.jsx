@@ -6,6 +6,9 @@ export default function MarketPricesTab() {
   const [selectedMaterial, setSelectedMaterial] = useState('');
   const [prices, setPrices] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [form, setForm] = useState({ price: '', supplier: '', region: 'TP.HCM', source: 'bao-gia-ncc' });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
 
   // Tải danh sách vật tư để đưa vào dropdown
   useEffect(() => {
@@ -23,22 +26,53 @@ export default function MarketPricesTab() {
     loadMaterials();
   }, []);
 
+  const loadPrices = async (materialId = selectedMaterial) => {
+    if (!materialId) return;
+    setLoading(true);
+    try {
+      const res = await dataApi.getMarketPrices(materialId);
+      setPrices(res.data || []);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // Tải giá khi chọn vật tư
   useEffect(() => {
-    if (!selectedMaterial) return;
-    async function loadPrices() {
-      setLoading(true);
-      try {
-        const res = await dataApi.getMarketPrices(selectedMaterial);
-        setPrices(res.data || []);
-      } catch (err) {
-        console.error(err);
-      } finally {
-        setLoading(false);
-      }
-    }
-    loadPrices();
+    loadPrices(selectedMaterial);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedMaterial]);
+
+  const handleAddPrice = async (e) => {
+    e.preventDefault();
+    setError('');
+    const price = Number(form.price);
+    if (!(price > 0)) {
+      setError('Nhập đơn giá lớn hơn 0.');
+      return;
+    }
+    const mat = materials.find(m => m._id === selectedMaterial);
+    if (!mat) return;
+    setSaving(true);
+    try {
+      await dataApi.createMarketPrice({
+        materialId: mat._id,
+        price,
+        unit: mat.unit,
+        supplier: form.supplier.trim(),
+        region: form.region.trim() || 'TP.HCM',
+        source: form.source
+      });
+      setForm(f => ({ ...f, price: '', supplier: '' }));
+      loadPrices(mat._id);
+    } catch (err) {
+      setError(err.message || 'Không lưu được báo giá.');
+    } finally {
+      setSaving(false);
+    }
+  };
 
   const currentMat = materials.find(m => m._id === selectedMaterial);
 
@@ -69,6 +103,28 @@ export default function MarketPricesTab() {
           <div><span className="text-[10px] text-gray-500 uppercase">ĐVT:</span> <span className="text-white font-mono text-xs">{currentMat.unit}</span></div>
           <div><span className="text-[10px] text-gray-500 uppercase">Phân loại:</span> <span className="text-white text-xs">{currentMat.category}</span></div>
         </div>
+      )}
+
+      {currentMat && (
+        <form onSubmit={handleAddPrice} className="bg-zinc-900/20 border border-white/5 rounded-2xl p-5 grid grid-cols-2 md:grid-cols-5 gap-3">
+          <input type="number" min="0" step="any" placeholder={`Đơn giá (đ/${currentMat.unit})`} value={form.price} onChange={e => setForm({ ...form, price: e.target.value })}
+            className="bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-xs text-white font-mono focus:outline-none focus:border-white/30" />
+          <input type="text" placeholder="Nhà cung cấp" value={form.supplier} onChange={e => setForm({ ...form, supplier: e.target.value })}
+            className="bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-xs text-white focus:outline-none focus:border-white/30" />
+          <input type="text" placeholder="Khu vực" value={form.region} onChange={e => setForm({ ...form, region: e.target.value })}
+            className="bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-xs text-white focus:outline-none focus:border-white/30" />
+          <select value={form.source} onChange={e => setForm({ ...form, source: e.target.value })}
+            className="bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-xs text-white focus:outline-none cursor-pointer">
+            <option value="bao-gia-ncc">Báo giá NCC</option>
+            <option value="khao-sat">Khảo sát</option>
+            <option value="website">Website</option>
+            <option value="noi-bo">Nội bộ</option>
+          </select>
+          <button disabled={saving} className="bg-amber-400 text-black text-[10px] font-bold uppercase tracking-widest rounded-xl hover:bg-amber-300 transition-all disabled:opacity-50">
+            {saving ? 'Đang lưu...' : '+ Thêm báo giá'}
+          </button>
+          {error && <p className="col-span-2 md:col-span-5 text-red-400 text-[11px]">{error}</p>}
+        </form>
       )}
 
       {loading ? (

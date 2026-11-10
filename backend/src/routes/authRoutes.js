@@ -4,7 +4,8 @@ const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const User = require('../models/User');
 const LoginLog = require('../models/LoginLog');
-const { verifyToken } = require('../middleware/authMiddleware');
+const { verifyToken, effectiveRole } = require('../middleware/authMiddleware');
+const { refreshEngagementSafe } = require('../services/engagementService');
 
 // =============================================================
 // API ĐĂNG NHẬP
@@ -15,7 +16,7 @@ router.post('/login', async (req, res) => {
   const userAgent = req.headers['user-agent'] || '';
 
   try {
-    if (!username || !password) {
+    if (typeof username !== 'string' || typeof password !== 'string' || !username || !password) {
       return res.status(400).json({
         success: false,
         message: 'Vui lòng nhập đầy đủ tên đăng nhập và mật khẩu.'
@@ -34,7 +35,7 @@ router.post('/login', async (req, res) => {
       }).catch(() => {});
       return res.status(400).json({
         success: false,
-        message: 'Tài khoản không tồn tại trên hệ thống!'
+        message: 'Tên đăng nhập hoặc mật khẩu chưa chính xác.'
       });
     }
 
@@ -57,13 +58,15 @@ router.post('/login', async (req, res) => {
       }).catch(() => {});
       return res.status(400).json({
         success: false,
-        message: 'Mật khẩu quản trị chưa chính xác!'
+        message: 'Tên đăng nhập hoặc mật khẩu chưa chính xác.'
       });
     }
 
     user.loginCount = (user.loginCount || 0) + 1;
     user.lastLoginAt = new Date();
     await user.save();
+    // Cập nhật điểm quan tâm cho telesale (không chờ, không làm chậm đăng nhập)
+    if (user.role.startsWith('customer')) refreshEngagementSafe(user._id);
 
     await LoginLog.create({
       userId: user._id,
@@ -74,11 +77,12 @@ router.post('/login', async (req, res) => {
       userAgent
     }).catch(() => {});
 
+    const role = effectiveRole(user);
     const token = jwt.sign(
       {
         userId: user._id.toString(),
         username: user.username,
-        role: user.role
+        role
       },
       process.env.JWT_SECRET,
       { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
@@ -91,7 +95,7 @@ router.post('/login', async (req, res) => {
       user: {
         userId: user._id,
         username: user.username,
-        role: user.role,
+        role,
         fullName: user.fullName || user.username,
         loginCount: user.loginCount,
         lastLoginAt: user.lastLoginAt
@@ -101,8 +105,7 @@ router.post('/login', async (req, res) => {
     console.error('Lỗi đăng nhập:', error);
     return res.status(500).json({
       success: false,
-      message: 'Lỗi hệ thống đăng nhập.',
-      error: error.message
+      message: 'Lỗi hệ thống đăng nhập.'
     });
   }
 });
@@ -117,7 +120,7 @@ router.post('/register', async (req, res) => {
   const userAgent = req.headers['user-agent'] || '';
 
   try {
-    if (!username || !password) {
+    if (typeof username !== 'string' || typeof password !== 'string' || !username || !password) {
       return res.status(400).json({
         success: false,
         message: 'Vui lòng nhập tên đăng nhập và mật khẩu.'
@@ -132,6 +135,13 @@ router.post('/register', async (req, res) => {
     }
 
     const normalizedUsername = username.trim().toLowerCase();
+
+    if (!/^[a-z0-9._-]{3,30}$/.test(normalizedUsername)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Tên đăng nhập 3-30 ký tự, chỉ gồm chữ thường, số, dấu chấm, gạch dưới hoặc gạch ngang.'
+      });
+    }
 
     if (normalizedUsername.length < 3) {
       return res.status(400).json({
@@ -155,8 +165,8 @@ router.post('/register', async (req, res) => {
       username: normalizedUsername,
       password: hashed,
       role: 'customer_free',
-      fullName: fullName || normalizedUsername,
-      email: email || '',
+      fullName: String(fullName || normalizedUsername).slice(0, 100),
+      email: String(email || '').slice(0, 120),
       isActive: true,
       loginCount: 1,
       lastLoginAt: new Date()
@@ -198,8 +208,7 @@ router.post('/register', async (req, res) => {
     console.error('Lỗi đăng ký:', error);
     return res.status(500).json({
       success: false,
-      message: 'Lỗi hệ thống đăng ký.',
-      error: error.message
+      message: 'Lỗi hệ thống đăng ký.'
     });
   }
 });
@@ -220,8 +229,7 @@ router.get('/me', verifyToken, async (req, res) => {
   } catch (error) {
     return res.status(500).json({
       success: false,
-      message: 'Lỗi truy vấn thông tin.',
-      error: error.message
+      message: 'Lỗi truy vấn thông tin.'
     });
   }
 });

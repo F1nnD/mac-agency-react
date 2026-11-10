@@ -4,12 +4,14 @@ import Header from '../components/Header';
 import FloorPlanForm from '../components/FloorPlanForm';
 import ConceptForm from '../components/ConceptForm';
 import LeadCaptureForm from '../components/LeadCaptureForm';
+import RenderResult from '../components/RenderResult';
 import { getCurrentUser, api } from '../utils/apiClient';
 
 const STEPS = [
   { id: 1, label: 'Mặt bằng' },
   { id: 2, label: 'Concept' },
-  { id: 3, label: 'Liên hệ' }
+  { id: 3, label: 'Liên hệ' },
+  { id: 4, label: 'Diễn hoạ' }
 ];
 
 export default function AIStudio() {
@@ -18,6 +20,7 @@ export default function AIStudio() {
   const [floorPlan, setFloorPlan] = useState(null);
   const [concept, setConcept] = useState(null);
   const [lead, setLead] = useState(null);
+  const [renderResult, setRenderResult] = useState(null);
   const user = getCurrentUser();
   const [zaloLink, setZaloLink] = useState('https://zalo.me/0375075975');
 
@@ -49,6 +52,12 @@ export default function AIStudio() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
+  const handleRenderDone = (data) => {
+    setRenderResult(data);
+    setStep(5);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
   const goBackToStep = (targetStep) => {
     setStep(targetStep);
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -71,7 +80,7 @@ export default function AIStudio() {
           </p>
         </div>
 
-        {step < 4 && (
+        {step < 5 && (
           <div className="mb-10">
             <div className="flex items-center justify-between max-w-md mx-auto">
               {STEPS.map((s, idx) => (
@@ -123,6 +132,14 @@ export default function AIStudio() {
           )}
 
           {step === 4 && floorPlan && concept && lead && (
+            <RenderResult
+              floorPlan={floorPlan}
+              concept={concept}
+              onDone={handleRenderDone}
+            />
+          )}
+
+          {step === 5 && floorPlan && concept && lead && (
             <div className="text-center space-y-6 py-8">
               <div className="w-20 h-20 mx-auto rounded-full bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center">
                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="2.5" stroke="currentColor" className="w-10 h-10 text-emerald-400">
@@ -152,6 +169,14 @@ export default function AIStudio() {
                   <span className="text-neutral-500">Style:</span>
                   <span className="text-emerald-400 font-semibold">{concept.style}</span>
                 </div>
+                {renderResult?.estimate?.available && (
+                  <div className="flex justify-between border-b border-white/5 pb-2">
+                    <span className="text-neutral-500">Dự toán sơ bộ:</span>
+                    <span className="text-amber-400 font-mono">
+                      {Math.round(renderResult.estimate.rangeLow / 1e6).toLocaleString('vi-VN')} – {Math.round(renderResult.estimate.rangeHigh / 1e6).toLocaleString('vi-VN')} triệu
+                    </span>
+                  </div>
+                )}
                 <div className="flex justify-between">
                   <span className="text-neutral-500">Liên hệ:</span>
                   <span className="text-white">{lead.phone}</span>

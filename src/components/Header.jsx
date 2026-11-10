@@ -6,11 +6,30 @@ import { getCurrentUser, logout } from '../utils/apiClient';
 
 gsap.registerPlugin(ScrollToPlugin);
 
+const MOBILE_NAV = [
+  { label: 'Giới Thiệu', hash: '#about' },
+  { label: 'Dịch Vụ', hash: '#services' },
+  { label: 'Dự Án', hash: '#portfolio' },
+  { label: 'Quy Trình', hash: '#process' },
+  { label: 'Bộ Tính Giá', hash: '#calculator' },
+  { label: 'AI Studio', path: '/ai-studio', accent: true }
+];
+
 export default function Header({ showBackBtn = true }) {
   const navigate = useNavigate();
   const location = useLocation();
 
   const [user, setUser] = useState(null);
+  const [menuOpen, setMenuOpen] = useState(false);
+
+  // Đóng menu khi đổi trang; khoá cuộn nền khi menu mở; ESC để đóng
+  useEffect(() => { setMenuOpen(false); }, [location.pathname]);
+  useEffect(() => {
+    document.body.style.overflow = menuOpen ? 'hidden' : '';
+    const onKey = (e) => { if (e.key === 'Escape') setMenuOpen(false); };
+    window.addEventListener('keydown', onKey);
+    return () => { document.body.style.overflow = ''; window.removeEventListener('keydown', onKey); };
+  }, [menuOpen]);
 
   useEffect(() => {
     setUser(getCurrentUser());
@@ -18,6 +37,7 @@ export default function Header({ showBackBtn = true }) {
 
   const handleNavClick = (e, targetHash, targetPath = '/home') => {
     e.preventDefault();
+    setMenuOpen(false);
 
     // Nếu đang ở trang /home thì cuộn mượt bằng GSAP
     if (location.pathname === '/home' || location.pathname === '/') {
@@ -53,7 +73,7 @@ export default function Header({ showBackBtn = true }) {
   const isCustomer = user && ['customer_free', 'customer_pro'].includes(user.role);
 
   return (
-    <header className="fixed top-0 left-0 right-0 z-50 bg-[#0b0b0b]/90 backdrop-blur-md border-b border-white/5 px-6 py-4 md:px-16 flex items-center justify-between w-full h-20 transition-all">
+    <header className="fixed top-0 left-0 right-0 z-50 bg-[#0b0b0b]/90 backdrop-blur-md border-b border-white/5 px-4 py-4 md:px-16 flex items-center justify-between w-full h-20 transition-all">
       {/* KHỐI LOGO VÀ NÚT QUAY LẠI */}
       <div className="flex items-center select-none">
         {showBackBtn && (
@@ -159,7 +179,7 @@ export default function Header({ showBackBtn = true }) {
           <button
             type="button"
             onClick={handleLogout}
-            className="text-[10px] md:text-xs tracking-widest uppercase font-bold text-red-400 hover:text-white hover:bg-red-900/40 border border-red-900/40 px-4 py-2 rounded-full transition-all duration-300 cursor-pointer outline-none"
+            className="hidden md:inline-block text-[10px] md:text-xs tracking-widest uppercase font-bold text-red-400 hover:text-white hover:bg-red-900/40 border border-red-900/40 px-4 py-2 rounded-full transition-all duration-300 cursor-pointer outline-none"
           >
             Đăng xuất
           </button>
@@ -167,11 +187,55 @@ export default function Header({ showBackBtn = true }) {
           <button
             type="button"
             onClick={() => navigate('/login')}
-            className="text-[10px] md:text-xs tracking-widest uppercase font-bold text-white/60 hover:text-white border border-white/10 px-4 py-2 rounded-full transition-all duration-300 cursor-pointer outline-none"
+            className="hidden md:inline-block text-[10px] md:text-xs tracking-widest uppercase font-bold text-white/60 hover:text-white border border-white/10 px-4 py-2 rounded-full transition-all duration-300 cursor-pointer outline-none"
           >
             Đăng nhập
           </button>
         )}
+
+        {/* Nút mở menu trên điện thoại */}
+        <button
+          type="button"
+          aria-label={menuOpen ? 'Đóng menu' : 'Mở menu'}
+          aria-expanded={menuOpen}
+          onClick={() => setMenuOpen(v => !v)}
+          className="md:hidden w-11 h-11 -mr-2 flex items-center justify-center text-white/80 hover:text-white bg-transparent border-none outline-none cursor-pointer"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor" className="w-6 h-6">
+            {menuOpen
+              ? <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              : <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5M3.75 17.25h16.5" />}
+          </svg>
+        </button>
+      </div>
+
+      {/* NGĂN KÉO MENU ĐIỆN THOẠI */}
+      <div
+        className={`md:hidden fixed inset-x-0 top-20 bottom-0 z-40 transition-opacity duration-300 ${menuOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}
+        aria-hidden={!menuOpen}
+      >
+        <div className="absolute inset-0 bg-black/70" onClick={() => setMenuOpen(false)} />
+        <nav className={`absolute right-0 top-0 bottom-0 w-[80%] max-w-xs bg-[#0b0b0b] border-l border-white/10 p-6 flex flex-col gap-1 overflow-y-auto transition-transform duration-300 ease-out ${menuOpen ? 'translate-x-0' : 'translate-x-full'}`}
+             style={{ paddingBottom: 'max(1.5rem, env(safe-area-inset-bottom))' }}>
+          {MOBILE_NAV.map(item => (
+            <button
+              key={item.label}
+              type="button"
+              onClick={(e) => item.path ? (setMenuOpen(false), navigate(item.path)) : handleNavClick(e, item.hash)}
+              className={`min-h-12 text-left text-sm tracking-widest uppercase font-medium bg-transparent border-none cursor-pointer outline-none border-b border-white/5 ${item.accent ? 'text-amber-400' : 'text-gray-300 hover:text-white'}`}
+            >
+              {item.label}
+            </button>
+          ))}
+          <div className="mt-auto pt-6 flex flex-col gap-3">
+            {isCustomer && <p className="text-[10px] uppercase tracking-widest text-white/40 font-mono">{user.username} · {user.role === 'customer_pro' ? 'Pro' : 'Free'}</p>}
+            {isCustomer ? (
+              <button type="button" onClick={handleLogout} className="min-h-12 text-xs tracking-widest uppercase font-bold text-red-400 border border-red-900/40 rounded-full cursor-pointer bg-transparent">Đăng xuất</button>
+            ) : (
+              <button type="button" onClick={() => navigate('/login')} className="min-h-12 text-xs tracking-widest uppercase font-bold text-black bg-white rounded-full cursor-pointer border-none">Đăng nhập</button>
+            )}
+          </div>
+        </nav>
       </div>
     </header>
   );
