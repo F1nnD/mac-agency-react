@@ -163,8 +163,16 @@ export const dataApi = {
 export const studioApi = {
   render: ({ floorPlanId, conceptId }) => api.post('/api/studio/render', { floorPlanId, conceptId }),
   quota: () => api.get('/api/studio/quota'),
-  renders: (all = false) => api.get(`/api/studio/renders${all ? '?all=true' : ''}`)
+  renders: ({ all = false, page = 1, limit = 20 } = {}) =>
+    api.get(`/api/studio/renders?page=${page}&limit=${limit}${all ? '&all=true' : ''}`),
+  getRender: (id) => api.get(`/api/studio/renders/${id}`),
+  deleteRender: (id) => api.delete(`/api/studio/renders/${id}`)
 };
+
+// Lịch sử chat lưu theo từng tài khoản: trước đây dùng chung một khoá nên người đăng nhập sau thấy chat của người trước
+export function chatStorageKey() {
+  return `mac_chat_history_${getCurrentUser()?.userId || 'guest'}`;
+}
 
 export const statsApi = {
   funnel: (days = 30) => api.get(`/api/stats/funnel?days=${days}`)

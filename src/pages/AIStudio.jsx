@@ -5,7 +5,8 @@ import FloorPlanForm from '../components/FloorPlanForm';
 import ConceptForm from '../components/ConceptForm';
 import LeadCaptureForm from '../components/LeadCaptureForm';
 import RenderResult from '../components/RenderResult';
-import { getCurrentUser, api } from '../utils/apiClient';
+import RenderHistory from '../components/RenderHistory';
+import { getCurrentUser, api, studioApi } from '../utils/apiClient';
 
 const STEPS = [
   { id: 1, label: 'Mặt bằng' },
@@ -21,6 +22,8 @@ export default function AIStudio() {
   const [concept, setConcept] = useState(null);
   const [lead, setLead] = useState(null);
   const [renderResult, setRenderResult] = useState(null);
+  const [view, setView] = useState('create'); // create | history
+  const [quota, setQuota] = useState(null);
   const user = getCurrentUser();
   const [zaloLink, setZaloLink] = useState('https://zalo.me/0375075975');
 
@@ -29,6 +32,12 @@ export default function AIStudio() {
       navigate('/login');
     }
   }, [user, navigate]);
+  // Số lượt diễn hoạ còn lại (làm mới sau mỗi lần diễn hoạ xong hoặc đổi sang tab Tạo mới)
+  useEffect(() => {
+    if (!user) return;
+    studioApi.quota().then(r => setQuota(r.data)).catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step, view]);
   useEffect(() => {
     api.get('/api/settings').then(res => {
       if (res.data?.zaloLink) setZaloLink(res.data.zaloLink);
@@ -80,6 +89,33 @@ export default function AIStudio() {
           </p>
         </div>
 
+        <div className="flex flex-col sm:flex-row items-center justify-center gap-3 mb-8">
+          <div className="inline-flex p-1 bg-zinc-900/80 border border-white/10 rounded-2xl">
+            {[['create', 'Tạo mới'], ['history', 'Lịch sử']].map(([id, label]) => (
+              <button
+                key={id}
+                onClick={() => setView(id)}
+                className={`min-h-11 px-6 rounded-xl text-[10px] font-bold uppercase tracking-widest transition-all cursor-pointer border-none outline-none ${view === id ? 'bg-amber-400 text-black' : 'bg-transparent text-white/50 hover:text-white'}`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          {quota && (
+            <span className="text-[10px] uppercase tracking-wider text-neutral-500 border border-white/10 rounded-full px-4 py-2">
+              {quota.unlimited
+                ? 'Không giới hạn lượt diễn hoạ'
+                : `Còn ${quota.remaining}/${quota.limit} lượt diễn hoạ${quota.windowDays > 1 ? ` mỗi ${quota.windowDays} ngày` : ' hôm nay'}`}
+            </span>
+          )}
+        </div>
+
+        {view === 'history' ? (
+          <div className="bg-zinc-900/20 border border-white/5 rounded-2xl p-4 sm:p-6 md:p-10">
+            <RenderHistory onNew={() => { setView('create'); goBackToStep(1); }} />
+          </div>
+        ) : (
+        <>
         {step < 5 && (
           <div className="mb-10">
             <div className="flex items-start justify-between max-w-md mx-auto">
@@ -185,8 +221,14 @@ export default function AIStudio() {
 
               <div className="flex flex-col sm:flex-row gap-3 justify-center pt-4">
                 <button
+                  onClick={() => setView('history')}
+                  className="min-h-12 border border-white/10 px-8 rounded-xl text-xs font-bold uppercase tracking-widest hover:border-white transition-all"
+                >
+                  Xem lịch sử diễn hoạ
+                </button>
+                <button
                   onClick={() => navigate('/home')}
-                  className="bg-white text-black px-8 py-3 rounded-xl text-xs font-bold uppercase tracking-widest hover:bg-neutral-200 transition-all"
+                  className="min-h-12 bg-white text-black px-8 rounded-xl text-xs font-bold uppercase tracking-widest hover:bg-neutral-200 transition-all"
                 >
                   Về trang chủ
                 </button>
@@ -202,6 +244,8 @@ export default function AIStudio() {
             </div>
           )}
         </div>
+        </>
+        )}
       </main>
     </div>
   );

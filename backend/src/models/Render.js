@@ -4,8 +4,15 @@ const mongoose = require('mongoose');
 // Dùng để: hiển thị lại cho khách, thống kê mức độ quan tâm, cung cấp ngữ cảnh cho telesale.
 const RenderSchema = new mongoose.Schema({
   userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
-  floorPlanId: { type: mongoose.Schema.Types.ObjectId, ref: 'FloorPlan', required: true, index: true },
+  // Bản diễn hoạ nhanh từ trang chủ không có mặt bằng đi kèm nên floorPlanId có thể rỗng
+  floorPlanId: { type: mongoose.Schema.Types.ObjectId, ref: 'FloorPlan', default: null, index: true },
   conceptId: { type: mongoose.Schema.Types.ObjectId, ref: 'Concept', default: null },
+
+  // Nguồn tạo: 'studio' (AI Studio, đủ mặt bằng + concept) hoặc 'quick' (form nhanh ở trang chủ)
+  source: { type: String, enum: ['studio', 'quick'], default: 'studio' },
+  // Tầng AI lúc tạo (quyết định độ sâu phân tích và kích thước ảnh)
+  tier: { type: String, default: 'free' },
+  title: { type: String, default: '' },
 
   prompt: { type: String, default: '' },
   imageUrl: { type: String, default: '' },

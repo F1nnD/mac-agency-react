@@ -38,6 +38,100 @@ function BulletList({ items }) {
   );
 }
 
+
+export function EstimateCard({ estimate }) {
+  const budget = BUDGET_TEXT[estimate?.budgetStatus];
+  return (
+    <div className="bg-zinc-900/40 border border-white/5 rounded-2xl p-5 md:p-6 space-y-4">
+      <h4 className="text-[10px] uppercase tracking-widest text-white/40 font-bold">Dự toán sơ bộ</h4>
+      {estimate?.available ? (
+        <>
+          <div>
+            <p className="text-2xl md:text-3xl font-bold text-white font-mono">
+              {formatBillion(estimate.rangeLow)} – {formatBillion(estimate.rangeHigh)}
+            </p>
+            <p className="text-[11px] text-neutral-500 mt-1">
+              Khoảng {formatVnd(estimate.perM2?.low)} – {formatVnd(estimate.perM2?.high)} / m² · {CONFIDENCE_LABEL[estimate.confidence] || ''}
+            </p>
+          </div>
+          {budget && (
+            <span className={`inline-block text-[10px] font-bold uppercase tracking-wider px-3 py-1.5 rounded-lg border ${budget.cls}`}>
+              {budget.label}
+            </span>
+          )}
+          <ul className="space-y-1.5">
+            {estimate.assumptions?.map((a, i) => (
+              <li key={i} className="text-[11px] text-neutral-500 leading-relaxed">• {a}</li>
+            ))}
+          </ul>
+          <p className="text-[11px] text-neutral-400 leading-relaxed">{estimate.disclaimer}</p>
+        </>
+      ) : (
+        <p className="text-xs text-neutral-400">{estimate?.message || 'Đội MAC sẽ gửi dự toán chi tiết sau khi trao đổi với bạn.'}</p>
+      )}
+    </div>
+  );
+}
+
+// Phần phân tích. Khoá của tầng Pro trở lên chỉ hiện khi máy chủ có trả về (khách free không có)
+export function AnalysisSections({ analysis }) {
+  if (!analysis) return null;
+  const internal = ['constructionNotes', 'costDrivers', 'salesTalkingPoints', 'qaChecklist'].some(k => analysis[k]?.length);
+  return (
+    <div className="space-y-8">
+      <div className="grid md:grid-cols-2 gap-8">
+        <Section title="Nhận xét mặt bằng"><BulletList items={analysis.siteObservations} /></Section>
+        <Section title="Gợi ý bố trí công năng"><BulletList items={analysis.layoutSuggestions} /></Section>
+        <Section title="Ngôn ngữ thiết kế"><BulletList items={analysis.designLanguage} /></Section>
+        <Section title="Vật liệu đề xuất">
+          <div className="flex flex-wrap gap-2">
+            {analysis.materialPalette?.map((m, i) => (
+              <span key={i} className="text-[11px] text-neutral-300 border border-white/10 bg-black/30 px-3 py-1.5 rounded-lg">{m}</span>
+            ))}
+          </div>
+        </Section>
+      </div>
+
+      {analysis.lightingStrategy && (
+        <Section title="Chiến lược ánh sáng">
+          <p className="text-xs text-neutral-300 leading-relaxed">{analysis.lightingStrategy}</p>
+        </Section>
+      )}
+
+      {(analysis.zoning?.length > 0 || analysis.circulation || analysis.budgetStructure?.length > 0 || analysis.phasing?.length > 0 || analysis.alternatives?.length > 0) && (
+        <div className="border border-amber-400/20 bg-amber-400/[0.03] rounded-2xl p-5 md:p-6 space-y-6">
+          <span className="text-[10px] tracking-[0.3em] text-amber-400 font-mono uppercase block">Phân tích chuyên sâu (Pro)</span>
+          <div className="grid md:grid-cols-2 gap-8">
+            {analysis.zoning?.length > 0 && <Section title="Phân vùng công năng"><BulletList items={analysis.zoning} /></Section>}
+            {analysis.budgetStructure?.length > 0 && <Section title="Cơ cấu chi phí tham khảo"><BulletList items={analysis.budgetStructure} /></Section>}
+            {analysis.phasing?.length > 0 && <Section title="Các giai đoạn triển khai"><BulletList items={analysis.phasing} /></Section>}
+            {analysis.alternatives?.length > 0 && <Section title="Phương án thay thế"><BulletList items={analysis.alternatives} /></Section>}
+          </div>
+          {analysis.circulation && (
+            <Section title="Lưu tuyến"><p className="text-xs text-neutral-300 leading-relaxed">{analysis.circulation}</p></Section>
+          )}
+        </div>
+      )}
+
+      {analysis.risks?.length > 0 && (
+        <Section title="Cần khảo sát thêm"><BulletList items={analysis.risks} /></Section>
+      )}
+
+      {internal && (
+        <div className="border border-red-400/20 bg-red-400/[0.03] rounded-2xl p-5 md:p-6 space-y-6">
+          <span className="text-[10px] tracking-[0.3em] text-red-300 font-mono uppercase block">Nội bộ MAC — không hiển thị cho khách</span>
+          <div className="grid md:grid-cols-2 gap-8">
+            {analysis.constructionNotes?.length > 0 && <Section title="Lưu ý thi công"><BulletList items={analysis.constructionNotes} /></Section>}
+            {analysis.costDrivers?.length > 0 && <Section title="Yếu tố chi phí"><BulletList items={analysis.costDrivers} /></Section>}
+            {analysis.salesTalkingPoints?.length > 0 && <Section title="Ý khai thác khi gọi khách"><BulletList items={analysis.salesTalkingPoints} /></Section>}
+            {analysis.qaChecklist?.length > 0 && <Section title="Checklist soát xét"><BulletList items={analysis.qaChecklist} /></Section>}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function RenderResult({ floorPlan, concept, onDone }) {
   const [state, setState] = useState('loading'); // loading | done | error
   const [result, setResult] = useState(null);
@@ -108,7 +202,6 @@ export default function RenderResult({ floorPlan, concept, onDone }) {
   }
 
   const { analysis, estimate, quota, imageUrl, analysisSource } = result;
-  const budget = BUDGET_TEXT[estimate?.budgetStatus];
 
   return (
     <div className="space-y-8 text-left">
@@ -160,71 +253,37 @@ export default function RenderResult({ floorPlan, concept, onDone }) {
         <p className="text-sm text-neutral-200 leading-relaxed border-l-2 border-amber-400 pl-4">{analysis.summary}</p>
       )}
 
-      {/* DỰ TOÁN SƠ BỘ */}
-      <div className="bg-zinc-900/40 border border-white/5 rounded-2xl p-6 space-y-4">
-        <h4 className="text-[10px] uppercase tracking-widest text-white/40 font-bold">Dự toán sơ bộ</h4>
-        {estimate?.available ? (
-          <>
-            <div>
-              <p className="text-2xl md:text-3xl font-bold text-white font-mono">
-                {formatBillion(estimate.rangeLow)} – {formatBillion(estimate.rangeHigh)}
-              </p>
-              <p className="text-[11px] text-neutral-500 mt-1">
-                Khoảng {formatVnd(estimate.perM2.low)} – {formatVnd(estimate.perM2.high)} / m² · {CONFIDENCE_LABEL[estimate.confidence] || ''}
-              </p>
-            </div>
-            {budget && (
-              <span className={`inline-block text-[10px] font-bold uppercase tracking-wider px-3 py-1.5 rounded-lg border ${budget.cls}`}>
-                {budget.label}
-              </span>
-            )}
-            <ul className="space-y-1.5">
-              {estimate.assumptions?.map((a, i) => (
-                <li key={i} className="text-[11px] text-neutral-500 leading-relaxed">• {a}</li>
-              ))}
-            </ul>
-            <p className="text-[11px] text-neutral-400 leading-relaxed">{estimate.disclaimer}</p>
-          </>
-        ) : (
-          <p className="text-xs text-neutral-400">{estimate?.message}</p>
-        )}
-      </div>
+      <EstimateCard estimate={estimate} />
 
-      {/* PHÂN TÍCH */}
-      <div className="grid md:grid-cols-2 gap-8">
-        <Section title="Nhận xét mặt bằng"><BulletList items={analysis?.siteObservations} /></Section>
-        <Section title="Gợi ý bố trí công năng"><BulletList items={analysis?.layoutSuggestions} /></Section>
-        <Section title="Ngôn ngữ thiết kế"><BulletList items={analysis?.designLanguage} /></Section>
-        <Section title="Vật liệu đề xuất">
-          <div className="flex flex-wrap gap-2">
-            {analysis?.materialPalette?.map((m, i) => (
-              <span key={i} className="text-[11px] text-neutral-300 border border-white/10 bg-black/30 px-3 py-1.5 rounded-lg">{m}</span>
-            ))}
-          </div>
-        </Section>
-      </div>
+      <AnalysisSections analysis={analysis} />
 
-      {analysis?.lightingStrategy && (
-        <Section title="Chiến lược ánh sáng">
-          <p className="text-xs text-neutral-300 leading-relaxed">{analysis.lightingStrategy}</p>
-        </Section>
-      )}
-
-      {analysis?.risks?.length > 0 && (
-        <Section title="Cần khảo sát thêm"><BulletList items={analysis.risks} /></Section>
-      )}
-
-      <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-4 border-t border-white/5">
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 pt-4 border-t border-white/5">
         <p className="text-[10px] text-neutral-600">
           {analysisSource === 'gemini' ? 'Phân tích bởi AI' : 'Phân tích theo bộ quy tắc thiết kế MAC'}
           {quota && !quota.unlimited && ` · Còn ${quota.remaining} lượt diễn hoạ trong chu kỳ này`}
         </p>
-        <button
-          onClick={() => onDone && onDone(result)}
-          className="bg-amber-400 hover:bg-amber-300 text-black px-8 py-3 rounded-xl text-xs font-bold uppercase tracking-widest transition-all"
-        >
-          Hoàn tất
-        </button>
+        <div className="flex flex-col-reverse sm:flex-row gap-3 w-full sm:w-auto">
+          <a
+            href={imageUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="min-h-12 inline-flex items-center justify-center border border-white/10 bg-black/20 text-[10px] font-bold uppercase tracking-widest px-5 rounded-xl hover:border-white transition-all text-center"
+          >
+            Mở ảnh gốc
+          </a>
+          <button
+            onClick={() => { if (window.confirm('Diễn hoạ lại sẽ dùng thêm 1 lượt. Tiếp tục?')) run(); }}
+            className="min-h-12 border border-white/10 bg-black/20 text-[10px] font-bold uppercase tracking-widest px-5 rounded-xl hover:border-white transition-all"
+          >
+            Diễn hoạ lại
+          </button>
+          <button
+            onClick={() => onDone && onDone(result)}
+            className="min-h-12 bg-amber-400 hover:bg-amber-300 text-black px-8 rounded-xl text-xs font-bold uppercase tracking-widest transition-all"
+          >
+            Hoàn tất
+          </button>
+        </div>
       </div>
     </div>
   );

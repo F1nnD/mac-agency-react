@@ -11,7 +11,12 @@ const {
   SPACE_TYPE_EN,
   MATERIAL_EN,
   getStyleGuide,
-  hexToColorName
+  hexToColorName,
+  ANALYSIS_ADDENDUM,
+  INTERNAL_ANALYSIS_KEYS,
+  EXTRA_ANALYSIS_LIST_KEYS,
+  IMAGE_SIZE_BY_TIER,
+  IMAGE_TAIL_BY_TIER
 } = require('./designKnowledge');
 
 // Danh sách model theo cấu hình đang chạy của MAC; chỉnh bằng biến GEMINI_MODELS khi Google đổi tên model
@@ -205,7 +210,7 @@ Các khoá bắt buộc:
 - "risks": mảng 0-3 chuỗi, các điểm cần khảo sát thêm (kết cấu, pháp lý, thoát nước...). Không khẳng định điều chưa biết.
 - "imagePrompt": MỘT đoạn tiếng Anh dưới 80 từ mô tả một ảnh phối cảnh kiến trúc chân thực, đúng style, màu, vật liệu và tỷ lệ mặt bằng. Không nhắc tên thương hiệu, người thật hay chữ viết trong ảnh.`;
 
-function ruleBasedAnalysis(floorPlan, concept) {
+function ruleBasedAnalysis(floorPlan, concept, tier = 'free') {
   const site = describeSite(floorPlan, concept);
   const guide = getStyleGuide(concept?.style);
   const spaceType = concept?.spaceType || 'Khác';
@@ -242,7 +247,7 @@ function ruleBasedAnalysis(floorPlan, concept) {
     ...guide.materials.split(',').map(s => s.trim())
   ].filter((v, i, arr) => v && arr.indexOf(v) === i).slice(0, 6);
 
-  const imagePrompt = buildFallbackImagePrompt(floorPlan, concept);
+  const imagePrompt = buildFallbackImagePrompt(floorPlan, concept, tier);
 
   return {
     summary: `Đề xuất hướng ${concept?.style || 'đã chọn'} cho ${spaceType.toLowerCase()} ${site.area} m², nhấn vào ${guide.terms.slice(0, 2).join(' và ')}. Bảng màu gợi ý: ${guide.palette}.`,
@@ -258,7 +263,7 @@ function ruleBasedAnalysis(floorPlan, concept) {
   };
 }
 
-function buildFallbackImagePrompt(floorPlan, concept) {
+function buildFallbackImagePrompt(floorPlan, concept, tier = 'free') {
   const guide = getStyleGuide(concept?.style);
   const spaceType = concept?.spaceType || 'Khác';
   const spaceEn = SPACE_TYPE_EN[spaceType] || SPACE_TYPE_EN['Khác'];
@@ -277,7 +282,7 @@ function buildFallbackImagePrompt(floorPlan, concept) {
     colors && `color palette: ${colors}`,
     materials && `main materials: ${materials}`,
     guide.en_keywords,
-    'professional architectural photography, natural light, 8k, highly detailed'
+    IMAGE_TAIL_BY_TIER[tier] || IMAGE_TAIL_BY_TIER.free
   ].filter(Boolean).join(', ');
 }
 
@@ -286,7 +291,7 @@ function normalizeAnalysis(raw, fallback) {
   if (!raw || typeof raw !== 'object') return base;
 
   const imagePrompt = clip(raw.imagePrompt, 600);
-  return {
+  const out = {
     summary: clip(raw.summary, 600) || base.summary,
     siteObservations: asList(raw.siteObservations, 5, 300).length ? asList(raw.siteObservations, 5, 300) : base.siteObservations,
     layoutSuggestions: asList(raw.layoutSuggestions, 5, 300).length ? asList(raw.layoutSuggestions, 5, 300) : base.layoutSuggestions,
@@ -297,10 +302,28 @@ function normalizeAnalysis(raw, fallback) {
     // Câu lệnh vẽ ảnh phải đủ dài mới tin; nếu AI trả quá ngắn thì dùng bản dự phòng
     imagePrompt: imagePrompt.length >= 40 ? imagePrompt : base.imagePrompt
   };
+
+  // Phần mở rộng theo tầng (Pro trở lên); khoá nào AI không trả thì bỏ qua
+  for (const key of EXTRA_ANALYSIS_LIST_KEYS) {
+    const list = asList(raw[key], 6, 300);
+    if (list.length) out[key] = list;
+  }
+  const circulation = clip(raw.circulation, 400);
+  if (circulation) out.circulation = circulation;
+  return out;
+}
+
+// Khách không bao giờ thấy các khoá nội bộ (ghi chú thi công, gợi ý chốt sale, checklist soát xét)
+function publicAnalysis(analysis, internal = false) {
+  if (!analysis || typeof analysis !== 'object') return {};
+  if (internal) return analysis;
+  const out = { ...analysis };
+  for (const key of INTERNAL_ANALYSIS_KEYS) delete out[key];
+  return out;
 }
 
 async function analyzeSite({ tier = 'free', floorPlan, concept }) {
-  const fallback = ruleBasedAnalysis(floorPlan, concept);
+  const fallback = ruleBasedAnalysis(floorPlan, concept, tier);
   if (!isConfigured()) return { analysis: fallback, source: 'rules', model: '' };
 
   const site = describeSite(floorPlan, concept);
@@ -322,7 +345,7 @@ async function analyzeSite({ tier = 'free', floorPlan, concept }) {
   try {
     const { text: out, model } = await generate({
       tier,
-      system: ANALYSIS_SYSTEM,
+      system: ANALYSIS_SYSTEM + (ANALYSIS_ADDENDUM[tier] || ''),
       contents: [{ role: 'user', parts: [{ text }, ...imageParts] }],
       json: true,
       temperature: 0.6
@@ -339,11 +362,12 @@ async function analyzeSite({ tier = 'free', floorPlan, concept }) {
 // -------------------------------------------------------------
 // Ảnh phối cảnh (Pollinations — miễn phí)
 // -------------------------------------------------------------
-function buildImageUrl({ prompt, seed }) {
+function buildImageUrl({ prompt, seed, tier = 'free' }) {
   const base = (process.env.IMAGE_API_BASE || 'https://image.pollinations.ai/prompt').replace(/\/+$/, '');
   const model = process.env.IMAGE_MODEL || 'flux';
-  const width = Number(process.env.IMAGE_WIDTH) || 1024;
-  const height = Number(process.env.IMAGE_HEIGHT) || 768;
+  const size = IMAGE_SIZE_BY_TIER[tier] || IMAGE_SIZE_BY_TIER.free;
+  const width = Number(process.env.IMAGE_WIDTH) || size.width;
+  const height = Number(process.env.IMAGE_HEIGHT) || size.height;
   return `${base}/${encodeURIComponent(clip(prompt, 600))}?model=${encodeURIComponent(model)}&width=${width}&height=${height}&seed=${Number(seed) || 0}&nologo=true`;
 }
 
@@ -356,6 +380,7 @@ module.exports = {
   buildFallbackImagePrompt,
   buildImageUrl,
   normalizeAnalysis,
+  publicAnalysis,
   parseJson,
   toContents,
   dataUrlToPart,

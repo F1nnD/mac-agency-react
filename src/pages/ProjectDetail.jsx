@@ -4,6 +4,7 @@ import gsap from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import { ScrollToPlugin } from 'gsap/ScrollToPlugin';
 import Header from '../components/Header';
+import MapEmbed from '../components/MapEmbed';
 gsap.registerPlugin(ScrollTrigger, ScrollToPlugin);
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
@@ -228,6 +229,9 @@ export default function ProjectDetail() {
             <p>• Thiết kế biệt thự nhà vườn cao cấp</p>
             <p>• Thiết kế cảnh quan nghệ thuật</p>
           </div>
+        </div>
+        <div className="mt-12">
+          <MapEmbed />
         </div>
       </footer>
     </div>

@@ -2,7 +2,9 @@
 // AI STUDIO — diễn hoạ không gian từ mặt bằng + concept của khách
 //   POST /api/studio/render      tạo bản diễn hoạ (mất 1 lượt render)
 //   GET  /api/studio/quota       xem lượt còn lại
-//   GET  /api/studio/renders     lịch sử diễn hoạ của tôi
+//   GET  /api/studio/renders     lịch sử diễn hoạ của tôi (phân trang)
+//   GET  /api/studio/renders/:id mở lại một bản
+//   DELETE /api/studio/renders/:id xoá khỏi lịch sử
 // =============================================================
 const express = require('express');
 const mongoose = require('mongoose');
@@ -65,7 +67,7 @@ router.post('/render', verifyToken, checkAIQuota, async (req, res) => {
 
     // 2. Ảnh phối cảnh
     const seed = crypto.randomInt(1, 2_000_000_000);
-    const imageUrl = ai.buildImageUrl({ prompt: analysis.imagePrompt, seed });
+    const imageUrl = ai.buildImageUrl({ prompt: analysis.imagePrompt, seed, tier: req.aiTier });
 
     // 3. Dự toán sơ bộ từ vật tư + giá thị trường trong database
     const estimate = await buildEstimateForPlan(floorPlan, concept);
@@ -75,6 +77,9 @@ router.post('/render', verifyToken, checkAIQuota, async (req, res) => {
       userId: req.user.userId,
       floorPlanId: floorPlan._id,
       conceptId: concept._id,
+      source: 'studio',
+      tier: req.aiTier,
+      title: `${concept.style} · ${floorPlan.projectName}`.slice(0, 160),
       prompt: analysis.imagePrompt,
       imageUrl,
       seed,
@@ -106,7 +111,7 @@ router.post('/render', verifyToken, checkAIQuota, async (req, res) => {
       data: {
         renderId: render._id,
         imageUrl,
-        analysis,
+        analysis: ai.publicAnalysis(analysis, isStaff(req.user)),
         analysisSource: source,
         estimate: isStaff(req.user) ? estimate : toPublicEstimate(estimate),
         quota: shapeQuota(quota)
@@ -118,24 +123,83 @@ router.post('/render', verifyToken, checkAIQuota, async (req, res) => {
   }
 });
 
+// Hình dạng bản ghi trả về cho giao diện: khách không thấy hạng mục / đơn giá nội bộ và khoá phân tích nội bộ
+function shapeRender(r, internal) {
+  let estimate = null;
+  try {
+    estimate = internal ? r.estimate : toPublicEstimate(r.estimate);
+  } catch (err) {
+    estimate = null;
+  }
+  const out = { ...r, analysis: ai.publicAnalysis(r.analysis, internal), estimate };
+  if (!internal) delete out.prompt;
+  return out;
+}
+
+// Lịch sử diễn hoạ của tôi (staff thêm ?all=true để xem của mọi người). Phân trang: ?page=1&limit=20
 router.get('/renders', verifyToken, async (req, res) => {
   try {
-    const filter = isStaff(req.user) && req.query.all === 'true' ? {} : { userId: req.user.userId };
-    const renders = await Render.find(filter)
-      .select('-estimate.items -prompt')
-      .populate('floorPlanId', 'projectName totalArea')
-      .sort({ createdAt: -1 })
-      .limit(30)
-      .lean();
+    const internal = isStaff(req.user);
+    const filter = internal && req.query.all === 'true' ? {} : { userId: req.user.userId };
+    const limit = Math.min(50, Math.max(1, parseInt(req.query.limit, 10) || 20));
+    const page = Math.max(1, parseInt(req.query.page, 10) || 1);
 
-    const data = renders.map(r => ({
-      ...r,
-      estimate: isStaff(req.user) ? r.estimate : toPublicEstimate(r.estimate)
-    }));
-    res.json({ success: true, data });
+    const [renders, total] = await Promise.all([
+      Render.find(filter)
+        .select('-estimate.items -prompt')
+        .populate('floorPlanId', 'projectName totalArea')
+        .sort({ createdAt: -1 })
+        .skip((page - 1) * limit)
+        .limit(limit)
+        .lean(),
+      Render.countDocuments(filter)
+    ]);
+
+    res.json({
+      success: true,
+      data: renders.map(r => shapeRender(r, internal)),
+      meta: { page, limit, total, hasMore: page * limit < total }
+    });
   } catch (error) {
     console.error('Lỗi đọc lịch sử diễn hoạ:', error);
     fail(res, 'Không đọc được lịch sử.', 500);
+  }
+});
+
+// Mở lại một bản diễn hoạ (chủ sở hữu hoặc nhân viên MAC)
+router.get('/renders/:id', verifyToken, async (req, res) => {
+  try {
+    if (!mongoose.isValidObjectId(req.params.id)) return fail(res, 'Mã không hợp lệ.');
+    const internal = isStaff(req.user);
+    const render = await Render.findById(req.params.id)
+      .populate('floorPlanId', 'projectName totalArea width length')
+      .populate('conceptId', 'style spaceType mainColors mainMaterials')
+      .lean();
+    if (!render) return fail(res, 'Không tìm thấy bản diễn hoạ.', 404);
+    if (String(render.userId) !== String(req.user.userId) && !internal) {
+      return fail(res, 'Bạn không có quyền xem bản này.', 403);
+    }
+    res.json({ success: true, data: shapeRender(render, internal) });
+  } catch (error) {
+    console.error('Lỗi đọc bản diễn hoạ:', error);
+    fail(res, 'Không đọc được bản diễn hoạ.', 500);
+  }
+});
+
+// Xoá khỏi lịch sử của tôi. Không hoàn lại lượt đã dùng, không xoá BOQ nháp của đội MAC.
+router.delete('/renders/:id', verifyToken, async (req, res) => {
+  try {
+    if (!mongoose.isValidObjectId(req.params.id)) return fail(res, 'Mã không hợp lệ.');
+    const render = await Render.findById(req.params.id).select('userId');
+    if (!render) return fail(res, 'Không tìm thấy bản diễn hoạ.', 404);
+    if (String(render.userId) !== String(req.user.userId) && req.user.role !== 'admin') {
+      return fail(res, 'Bạn không có quyền xoá bản này.', 403);
+    }
+    await Render.deleteOne({ _id: render._id });
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Lỗi xoá bản diễn hoạ:', error);
+    fail(res, 'Không xoá được.', 500);
   }
 });
 

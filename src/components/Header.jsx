@@ -21,6 +21,22 @@ export default function Header({ showBackBtn = true }) {
 
   const [user, setUser] = useState(null);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [progress, setProgress] = useState(0);
+
+  // Thanh tiến độ cuộn trang (mảnh, màu hổ phách)
+  useEffect(() => {
+    let raf = 0;
+    const onScroll = () => {
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => {
+        const h = document.documentElement.scrollHeight - window.innerHeight;
+        setProgress(h > 0 ? Math.min(1, window.scrollY / h) : 0);
+      });
+    };
+    onScroll();
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => { cancelAnimationFrame(raf); window.removeEventListener('scroll', onScroll); };
+  }, [location.pathname]);
 
   // Đóng menu khi đổi trang; khoá cuộn nền khi menu mở; ESC để đóng
   useEffect(() => { setMenuOpen(false); }, [location.pathname]);
@@ -209,7 +225,9 @@ export default function Header({ showBackBtn = true }) {
           </svg>
         </button>
       </div>
-
+      <div aria-hidden="true" className="absolute bottom-0 left-0 right-0 h-[2px] pointer-events-none">
+        <div className="h-full w-full bg-amber-400 origin-left" style={{ transform: `scaleX(${progress})` }} />
+      </div>
     </header>
 
     {/* NGĂN KÉO MENU ĐIỆN THOẠI: để NGOÀI header vì backdrop-filter nhốt phần tử fixed bên trong */}

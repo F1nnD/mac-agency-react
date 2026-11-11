@@ -5,6 +5,7 @@
 require('dotenv').config();
 
 const express = require('express');
+const crypto = require('crypto');
 const cors = require('cors');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
@@ -22,7 +23,8 @@ const { checkAIQuota, checkChatQuota, recordUsage } = require('./src/middleware/
 
 // ===== SERVICES =====
 const ai = require('./src/services/aiService');
-const { FREE_CHAT_SYSTEM, PRO_CHAT_SYSTEM, SPACE_TYPE_EN } = require('./src/services/designKnowledge');
+const { SPACE_TYPE_EN, chatSystemFor } = require('./src/services/designKnowledge');
+const Render = require('./src/models/Render');
 const { buildEstimateForPlan, toPublicEstimate, loadMaterialsWithPrices, pickPrice } = require('./src/services/estimateService');
 
 // ===== ROUTES =====
@@ -122,7 +124,7 @@ app.post('/api/ai-free', optionalAuth, checkChatQuota, async (req, res) => {
       try {
         const out = await ai.chatReply({
           tier: req.aiTier,
-          system: FREE_CHAT_SYSTEM,
+          system: chatSystemFor('free'),
           history: chatHistory,
           message: userMessage,
           maxHistory: 6
@@ -162,10 +164,30 @@ app.post('/api/ai-pro', optionalAuth, requirePro, proGate, async (req, res) => {
       };
       const concept = { style: String(style).slice(0, 40), spaceType: space, mainColors: [], mainMaterials: [] };
 
-      const prompt = ai.buildFallbackImagePrompt(floorPlan, concept);
-      const aiImageUrl = ai.buildImageUrl({ prompt, seed: Math.floor(Math.random() * 2_000_000_000) });
+      // Cùng một đường đi với AI Studio: AI phân tích theo tầng (Pro / nhân viên / quản trị) rồi mới vẽ,
+      // và LƯU vào lịch sử diễn hoạ của tài khoản (trước đây bản nhanh không được lưu)
+      const { analysis, source, model } = await ai.analyzeSite({ tier: req.aiTier, floorPlan, concept });
+      const seed = crypto.randomInt(1, 2_000_000_000);
+      const aiImageUrl = ai.buildImageUrl({ prompt: analysis.imagePrompt, seed, tier: req.aiTier });
       const estimate = await buildEstimateForPlan(floorPlan, concept);
       const isStaffUser = ['admin', 'staff'].includes(req.user.role);
+
+      const render = await Render.create({
+        userId: req.user.userId,
+        source: 'quick',
+        tier: req.aiTier,
+        title: `${space} · ${concept.style} · ${numArea} m²`.slice(0, 160),
+        prompt: analysis.imagePrompt,
+        imageUrl: aiImageUrl,
+        seed,
+        analysis,
+        analysisSource: source,
+        model,
+        estimate
+      }).catch(err => {
+        console.error('[ai-pro] Không lưu được lịch sử diễn hoạ:', err.message);
+        return null;
+      });
 
       await recordUsage(req, {
         endpoint: '/api/ai-pro', requestType: 'render', generatedImage: true, userMessage: `${space} - ${style} - ${numArea}m2`
@@ -174,8 +196,10 @@ app.post('/api/ai-pro', optionalAuth, requirePro, proGate, async (req, res) => {
       return res.json({
         success: true,
         tier: req.aiTier,
-        replyText: `Đã tạo phối cảnh ${space.toLowerCase()} phong cách ${style}, diện tích ${numArea} m².`,
+        renderId: render?._id || null,
+        replyText: analysis.summary || `Đã tạo phối cảnh ${space.toLowerCase()} phong cách ${style}, diện tích ${numArea} m².`,
         style, spaceType: space, area: numArea, aiImageUrl,
+        analysis: ai.publicAnalysis(analysis, isStaffUser),
         estimate: isStaffUser ? estimate : toPublicEstimate(estimate),
         remaining: Math.max(0, (req.aiRemaining ?? 1) - 1),
         isPureChat: false
@@ -192,10 +216,9 @@ app.post('/api/ai-pro', optionalAuth, requirePro, proGate, async (req, res) => {
     let errorMessage = '';
     if (ai.isConfigured()) {
       try {
-        const internal = ['admin', 'staff'].includes(req.user.role);
         const out = await ai.chatReply({
           tier: req.aiTier,
-          system: internal ? PRO_CHAT_SYSTEM : FREE_CHAT_SYSTEM,
+          system: chatSystemFor(req.aiTier),
           history: chatHistory,
           message: userMessage,
           maxHistory: 8
@@ -245,7 +268,7 @@ app.post('/api/ai-admin', optionalAuth, requireRole('admin', 'staff'), async (re
 
   req.aiTier = req.user.role === 'admin' ? 'admin' : 'staff';
   try {
-    const system = PRO_CHAT_SYSTEM + (await buildInternalContext());
+    const system = chatSystemFor(req.aiTier) + (await buildInternalContext());
     const out = await ai.chatReply({
       tier: req.aiTier,
       system,

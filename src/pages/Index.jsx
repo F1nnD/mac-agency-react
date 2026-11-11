@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import gsap from 'gsap';
+import { isTouchDevice, prefersReducedMotion } from '../utils/motion';
 
 export default function Index() {
   const navigate = useNavigate();
@@ -13,26 +14,64 @@ export default function Index() {
   const [currentIdx, setCurrentIdx] = useState(0);
 
   useEffect(() => {
-    // 1. THUẬT TOÁN ĐÈN PHA MỞ RỘNG (RỌI THEO TỌA ĐỘ CHUỘT)
-    const handleMouseMove = (e) => {
-      const x = e.clientX;
-      const y = e.clientY;
-
+    // 1. ĐÈN PHA RỌI LOGO
+    //    Máy tính: đuổi theo chuột (như cũ).
+    //    Điện thoại: không có chuột nên đèn tự lướt theo quỹ đạo mềm mại; chạm / vuốt thì đèn đuổi theo ngón tay,
+    //    thả tay ~2.5 giây thì đèn lại tự lướt tiếp.
+    const touch = isTouchDevice();
+    const reduce = prefersReducedMotion();
+    const radius = () => (touch ? Math.min(Math.max(window.innerWidth, window.innerHeight) * 0.75, 620) : 950);
+    const paint = (x, y) => {
+      const r = radius();
       if (flashlightRef.current) {
         if (flashlightRef.current.classList.contains('opacity-0')) {
           flashlightRef.current.classList.remove('opacity-0');
         }
-        flashlightRef.current.style.background = `radial-gradient(circle 900px at ${x}px ${y}px, rgba(255, 255, 255, 0.07) 0%, transparent 100%)`;
+        flashlightRef.current.style.background = `radial-gradient(circle ${Math.round(r * 0.95)}px at ${x}px ${y}px, rgba(255, 255, 255, 0.07) 0%, transparent 100%)`;
       }
-
       if (maskWrapperRef.current) {
-        const maskStyle = `radial-gradient(circle 950px at ${x}px ${y}px, rgba(255,255,255,1) 0%, rgba(255,255,255,0.3) 40%, transparent 100%)`;
+        const maskStyle = `radial-gradient(circle ${r}px at ${x}px ${y}px, rgba(255,255,255,1) 0%, rgba(255,255,255,0.3) 40%, transparent 100%)`;
         maskWrapperRef.current.style.maskImage = maskStyle;
         maskWrapperRef.current.style.webkitMaskImage = maskStyle;
       }
     };
 
-    window.addEventListener('mousemove', handleMouseMove);
+    const handleMouseMove = (e) => paint(e.clientX, e.clientY);
+
+    let lastTouch = -1e9;
+    let cur = { x: window.innerWidth / 2, y: window.innerHeight / 2 };
+    let target = { ...cur };
+    const handlePointer = (e) => {
+      lastTouch = performance.now();
+      target = { x: e.clientX, y: e.clientY };
+    };
+    let tick = null;
+
+    if (!touch) {
+      window.addEventListener('mousemove', handleMouseMove);
+    } else if (reduce) {
+      paint(cur.x, cur.y * 0.9); // người dùng tắt chuyển động: giữ đèn tĩnh giữa màn hình
+    } else {
+      window.addEventListener('pointerdown', handlePointer, { passive: true });
+      window.addEventListener('pointermove', handlePointer, { passive: true });
+      const t0 = performance.now();
+      tick = () => {
+        const now = performance.now();
+        if (now - lastTouch > 2500) {
+          const t = (now - t0) / 1000;
+          const w = window.innerWidth;
+          const h = window.innerHeight;
+          target = {
+            x: w * (0.5 + 0.36 * Math.sin(t * 0.55)),
+            y: h * (0.46 + 0.30 * Math.sin(t * 0.83 + 1.2))
+          };
+        }
+        cur.x += (target.x - cur.x) * 0.07;
+        cur.y += (target.y - cur.y) * 0.07;
+        paint(cur.x, cur.y);
+      };
+      gsap.ticker.add(tick);
+    }
 
     // 2. LOGIC TỰ ĐỘNG CHUYỂN SLIDE (MỖI 5 GIÂY)
     const nextSlide = () => {
@@ -47,6 +86,9 @@ export default function Index() {
 
     return () => {
       window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('pointerdown', handlePointer);
+      window.removeEventListener('pointermove', handlePointer);
+      if (tick) gsap.ticker.remove(tick);
       clearInterval(autoSlideInterval);
     };
   }, []);
@@ -159,7 +201,7 @@ export default function Index() {
       {/* ========================================================================= */}
       {/* KHỐI CHỮ TRUNG TÂM & NÚT ĐIỀU HƯỚNG CHÍNH (Nâng lên z-40 để đè lên logo nền) */}
       {/* ========================================================================= */}
-      <div className="relative z-40 h-screen flex flex-col justify-between p-8 md:p-12 pointer-events-none">
+      <div className="relative z-40 h-full flex flex-col justify-between p-6 md:p-12 pointer-events-none">
         <div></div>
     
         <div className="max-w-4xl mx-auto text-center pointer-events-auto">

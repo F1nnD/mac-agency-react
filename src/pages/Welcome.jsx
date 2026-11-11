@@ -19,7 +19,7 @@ export default function Welcome() {
   };
 
   return (
-    <div className="fixed inset-0 w-full h-full flex flex-col items-center justify-center bg-[#0b0b0b] text-gray-300 antialiased z-50 p-6">
+    <div className="fixed inset-0 w-full h-full overflow-y-auto overflow-x-hidden flex flex-col items-center md:justify-center bg-[#0b0b0b] text-gray-300 antialiased z-50 px-4 pt-10 pb-16 md:p-6">
       <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-white/[0.01] rounded-full blur-[120px] pointer-events-none z-0"></div>
 
       <div className="w-full max-w-5xl flex flex-col items-center z-10 space-y-10 md:space-y-12">
@@ -34,7 +34,7 @@ export default function Welcome() {
           {/* PORTAL 01 */}
           <button
             onClick={handleCustomerPortal}
-            className="group relative p-8 md:p-10 bg-zinc-900/10 border border-white/5 rounded-2xl flex flex-col justify-between aspect-[4/3] hover:border-white/20 transition-all duration-500 backdrop-blur-sm cursor-pointer text-left w-full outline-none"
+            className="group relative p-8 md:p-10 bg-zinc-900/10 border border-white/5 rounded-2xl flex flex-col justify-between md:aspect-[4/3] min-h-[200px] hover:border-white/20 transition-all duration-500 backdrop-blur-sm cursor-pointer text-left w-full outline-none"
           >
             <span className="font-mono text-xs text-white/20 font-bold group-hover:text-white/40 transition-colors">PORTAL 01</span>
             <div className="space-y-3 mt-4">
@@ -51,7 +51,7 @@ export default function Welcome() {
           {/* PORTAL 02 */}
           <button
             onClick={handleAdminPortal}
-            className="group relative p-8 md:p-10 bg-zinc-900/10 border border-white/5 rounded-2xl flex flex-col justify-between aspect-[4/3] hover:border-white/20 transition-all duration-500 backdrop-blur-sm cursor-pointer text-left w-full outline-none"
+            className="group relative p-8 md:p-10 bg-zinc-900/10 border border-white/5 rounded-2xl flex flex-col justify-between md:aspect-[4/3] min-h-[200px] hover:border-white/20 transition-all duration-500 backdrop-blur-sm cursor-pointer text-left w-full outline-none"
           >
             <span className="font-mono text-xs text-white/20 font-bold group-hover:text-white/40 transition-colors">PORTAL 02</span>
             <div className="space-y-3 mt-4">
@@ -67,7 +67,7 @@ export default function Welcome() {
         </div>
       </div>
 
-      <div className="absolute bottom-6 left-1/2 -translate-x-1/2 text-center z-10 select-none w-full">
+      <div className="mt-10 md:mt-0 md:absolute md:bottom-6 md:left-1/2 md:-translate-x-1/2 text-center z-10 select-none w-full">
         <p className="text-[9px] tracking-widest text-neutral-600 uppercase font-light">
           © 2026 MAC System Platform. Architectural & Operational Bản Sắc.
         </p>

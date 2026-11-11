@@ -256,3 +256,74 @@ test('điểm quan tâm: công thức một nơi, tối đa 100', () => {
   assert.equal(scoreOf({ loginCount: 50, leadCount: 3 }), 100);
   assert.equal(scoreOf({}), 0);
 });
+
+// -------------------------------------------------------------
+// AI 3 tầng: lời nhắc, độ sâu phân tích, lọc nội dung nội bộ
+// -------------------------------------------------------------
+const dk = require('../src/services/designKnowledge');
+
+test('AI 3 tầng: mỗi tầng một lời nhắc riêng, tầng lạ rơi về tầng thấp nhất', () => {
+  const free = dk.chatSystemFor('free');
+  const pro = dk.chatSystemFor('pro');
+  const staff = dk.chatSystemFor('staff');
+  const admin = dk.chatSystemFor('admin');
+  assert.equal(new Set([free, pro, staff, admin]).size, 4);
+  assert.equal(dk.chatSystemFor('guest'), free);
+  assert.equal(dk.chatSystemFor(undefined), free);
+  // khách free / pro không được nhận chỉ dẫn nội bộ
+  assert.doesNotMatch(free, /ĐỒNG NGHIỆP NỘI BỘ/);
+  assert.doesNotMatch(pro, /ĐỒNG NGHIỆP NỘI BỘ|DỮ LIỆU VẬT TƯ NỘI BỘ/);
+  assert.match(staff, /ĐỒNG NGHIỆP NỘI BỘ/);
+  assert.match(admin, /QUYỀN HẠN BỔ SUNG/);
+});
+
+test('AI 3 tầng: phân tích sâu dần theo tầng và gửi đúng lời nhắc cho Gemini', async () => {
+  process.env.GEMINI_API_KEY = 'test-key';
+  const realFetch = global.fetch;
+  const systems = [];
+  try {
+    global.fetch = async (url, opts) => {
+      systems.push(JSON.parse(opts.body).systemInstruction.parts[0].text);
+      return {
+        ok: true,
+        json: async () => ({ candidates: [{ content: { parts: [{ text: JSON.stringify({
+          summary: 'Hướng Japandi.', siteObservations: ['a'], layoutSuggestions: ['b'], designLanguage: ['c'], materialPalette: ['d'],
+          lightingStrategy: 'e', risks: [],
+          imagePrompt: 'photorealistic japandi coffee shop interior with warm oak and linen, soft daylight, wide angle',
+          zoning: ['Quầy — 20% — điểm nhấn'], circulation: 'Một chiều từ cửa vào.', budgetStructure: ['Nội thất — khoảng 35%'],
+          constructionNotes: ['Chống thấm khu vệ sinh'], salesTalkingPoints: ['Hỏi số chỗ ngồi mục tiêu'], qaChecklist: ['Đối chiếu đơn giá']
+        }) }] } }] })
+      };
+    };
+    const free = await ai.analyzeSite({ tier: 'free', floorPlan: FP, concept: CO });
+    const pro = await ai.analyzeSite({ tier: 'pro', floorPlan: FP, concept: CO });
+    const admin = await ai.analyzeSite({ tier: 'admin', floorPlan: FP, concept: CO });
+
+    assert.doesNotMatch(systems[0], /BỔ SUNG CHO/);
+    assert.match(systems[1], /BỔ SUNG CHO TÀI KHOẢN PRO/);
+    assert.match(systems[2], /qaChecklist/);
+
+    // phần mở rộng được giữ lại; khách không thấy khoá nội bộ
+    assert.deepEqual(pro.analysis.zoning, ['Quầy — 20% — điểm nhấn']);
+    assert.equal(pro.analysis.circulation, 'Một chiều từ cửa vào.');
+    const publicPro = ai.publicAnalysis(pro.analysis, false);
+    assert.equal(publicPro.constructionNotes, undefined);
+    assert.equal(publicPro.salesTalkingPoints, undefined);
+    assert.ok(publicPro.zoning);
+    assert.ok(ai.publicAnalysis(admin.analysis, true).qaChecklist);
+    assert.ok(free.analysis.summary);
+  } finally {
+    global.fetch = realFetch;
+    delete process.env.GEMINI_API_KEY;
+  }
+});
+
+test('AI 3 tầng: ảnh lớn dần theo tầng, lời nhắc ảnh dự phòng có góc máy ở tầng cao', () => {
+  const size = u => /width=(\d+)&height=(\d+)/.exec(u).slice(1).map(Number);
+  assert.deepEqual(size(ai.buildImageUrl({ prompt: 'x', seed: 1, tier: 'free' })), [1024, 768]);
+  assert.deepEqual(size(ai.buildImageUrl({ prompt: 'x', seed: 1, tier: 'pro' })), [1280, 960]);
+  assert.deepEqual(size(ai.buildImageUrl({ prompt: 'x', seed: 1, tier: 'admin' })), [1536, 1152]);
+  assert.deepEqual(size(ai.buildImageUrl({ prompt: 'x', seed: 1 })), [1024, 768]);
+  assert.doesNotMatch(ai.buildFallbackImagePrompt(FP, CO, 'free'), /24mm/);
+  assert.match(ai.buildFallbackImagePrompt(FP, CO, 'pro'), /24mm/);
+});
