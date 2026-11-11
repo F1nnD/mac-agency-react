@@ -175,7 +175,7 @@ export default function ConceptForm({ floorPlanId, onSuccess, onBack }) {
                 <button
                   type="button"
                   onClick={() => removeColor(idx)}
-                  className="absolute -top-2 -right-2 bg-red-600 text-white w-5 h-5 rounded-full text-[10px] opacity-0 group-hover:opacity-100 transition-opacity"
+                  className="absolute -top-2 -right-2 bg-red-600 text-white w-7 h-7 md:w-5 md:h-5 rounded-full text-[10px] flex items-center justify-center opacity-100 md:opacity-0 md:group-hover:opacity-100 focus:opacity-100 transition-opacity"
                 >
                   x
                 </button>

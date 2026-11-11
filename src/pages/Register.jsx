@@ -59,7 +59,7 @@ export default function Register() {
   };
 
   return (
-    <div className="w-screen h-screen bg-[#0b0b0b] text-gray-300 antialiased overflow-hidden flex items-center justify-center p-6 relative font-sans">
+    <div className="w-full min-h-dvh bg-[#0b0b0b] text-gray-300 antialiased overflow-x-hidden flex items-center justify-center px-4 py-10 sm:p-6 relative font-sans">
       <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[400px] h-[400px] bg-emerald-500/[0.02] rounded-full blur-[100px] pointer-events-none z-0"></div>
 
       <button

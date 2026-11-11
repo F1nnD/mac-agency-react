@@ -67,7 +67,7 @@ export default function AIStudio() {
     <div className="w-full min-h-screen bg-[#0b0b0b] text-gray-300 antialiased font-sans">
       <Header showBackBtn={true} />
 
-      <main className="pt-32 pb-24 px-6 md:px-16 max-w-5xl mx-auto w-full">
+      <main className="pt-28 md:pt-32 pb-24 px-4 md:px-16 max-w-5xl mx-auto w-full">
         <div className="mb-12 text-center">
           <span className="text-[10px] tracking-[0.4em] text-white/30 uppercase block mb-3 font-semibold">
             AI Studio
@@ -82,7 +82,7 @@ export default function AIStudio() {
 
         {step < 5 && (
           <div className="mb-10">
-            <div className="flex items-center justify-between max-w-md mx-auto">
+            <div className="flex items-start justify-between max-w-md mx-auto">
               {STEPS.map((s, idx) => (
                 <React.Fragment key={s.id}>
                   <div className="flex flex-col items-center gap-2">
@@ -100,7 +100,7 @@ export default function AIStudio() {
                     </span>
                   </div>
                   {idx < STEPS.length - 1 && (
-                    <div className={`flex-1 h-[1px] mx-3 transition-all ${
+                    <div className={`flex-1 h-[1px] mx-2 mt-5 transition-all ${
                       step > s.id ? 'bg-amber-400' : 'bg-white/10'
                     }`}></div>
                   )}
@@ -110,7 +110,7 @@ export default function AIStudio() {
           </div>
         )}
 
-        <div className="bg-zinc-900/20 border border-white/5 rounded-2xl p-6 md:p-10">
+        <div className="bg-zinc-900/20 border border-white/5 rounded-2xl p-4 sm:p-6 md:p-10">
           {step === 1 && (
             <FloorPlanForm onSuccess={handleFloorPlanSuccess} />
           )}

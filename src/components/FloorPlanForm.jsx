@@ -251,14 +251,14 @@ export default function FloorPlanForm({ onSuccess, initialData = null }) {
         </label>
 
         {images.length > 0 && (
-          <div className="grid grid-cols-5 gap-2 mt-3">
+          <div className="grid grid-cols-3 sm:grid-cols-5 gap-2 mt-3">
             {images.map((img, idx) => (
               <div key={idx} className="relative group aspect-square bg-neutral-900 rounded-lg overflow-hidden border border-white/10">
                 <img src={img} alt="" className="w-full h-full object-cover" />
                 <button
                   type="button"
                   onClick={() => removeImage(idx)}
-                  className="absolute top-1 right-1 bg-red-900/80 hover:bg-red-800 text-white w-5 h-5 rounded-full text-[10px] opacity-0 group-hover:opacity-100 transition-opacity"
+                  className="absolute top-1 right-1 bg-red-900/80 hover:bg-red-800 text-white w-7 h-7 md:w-5 md:h-5 rounded-full text-[10px] flex items-center justify-center opacity-100 md:opacity-0 md:group-hover:opacity-100 focus:opacity-100 transition-opacity"
                 >
                   x
                 </button>

@@ -6,10 +6,13 @@ import { ScrollToPlugin } from 'gsap/ScrollToPlugin';
 import Header from '../components/Header';
 gsap.registerPlugin(ScrollTrigger, ScrollToPlugin);
 
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+
 export default function ProjectDetail() {
   const navigate = useNavigate();
   const location = useLocation();
   const [projectData, setProjectData] = useState(null);
+  const [failed, setFailed] = useState(false);
 
   // =========================================================================
   // 1. THUẬT TOÁN ĐỌC API REALTIME TỪ DATABASE QUA SLUG BREADCRUMB
@@ -21,7 +24,7 @@ export default function ProjectDetail() {
     async function loadProjectDetail() {
       try {
         // Thay đổi gốc rễ: Gọi API Backend để lấy dữ liệu thực tế từ DB Atlas
-        const response = await fetch(`http://localhost:5000/api/projects/by-slug?breadcrumb=${projectId}`);
+        const response = await fetch(`${API_BASE_URL}/api/projects/by-slug?breadcrumb=${encodeURIComponent(projectId)}`);
         
         if (response.ok) {
           const data = await response.json();
@@ -39,9 +42,12 @@ export default function ProjectDetail() {
           const localData = database[projectId];
           if (localData) {
             setProjectData(localData);
+          } else {
+            setFailed(true);
           }
         } catch (jsonErr) {
           console.error("Lỗi lốt kho dữ liệu JSON tĩnh:", jsonErr);
+          setFailed(true);
         }
       }
     }
@@ -85,7 +91,12 @@ export default function ProjectDetail() {
   if (!projectData) {
     return (
       <div className="w-full min-h-screen bg-[#0b0b0b] flex items-center justify-center text-white/30 text-xs tracking-widest uppercase font-sans">
-        Đang nạp dữ liệu không gian kiến trúc...
+        {failed ? (
+          <div className="text-center space-y-5 px-6">
+            <p className="text-white/50 normal-case tracking-normal text-sm">Không tải được dự án này. Có thể đường dẫn đã đổi hoặc mạng đang yếu.</p>
+            <button onClick={() => navigate('/portfolio')} className="min-h-11 px-6 rounded-full border border-white/20 text-white text-xs tracking-widest uppercase cursor-pointer bg-transparent">Về danh mục dự án</button>
+          </div>
+        ) : 'Đang nạp dữ liệu không gian kiến trúc...'}
       </div>
     );
   }
@@ -105,16 +116,16 @@ export default function ProjectDetail() {
       <div className="h-28"></div>
 
       {/* KHỐI THÔNG TIN DỰ ÁN DYNAMIC */}
-      <main className="max-w-6xl mx-auto px-6 md:px-12 py-16 w-full">
+      <main className="max-w-6xl mx-auto px-4 md:px-12 py-8 md:py-16 w-full">
         <div className="text-[10px] tracking-widest text-white/30 uppercase mb-6 text-left select-none">
           <button onClick={() => navigate('/portfolio')} className="hover:text-white transition-colors bg-transparent border-none cursor-pointer font-semibold uppercase tracking-widest text-[10px]">Dự án nổi bật</button>
           <span className="mx-2">/</span>
           <span id="breadcrumb-name" className="text-white/60">{projectData.breadcrumb}</span>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-12 border-b border-white/5 pb-16">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-8 md:gap-12 border-b border-white/5 pb-10 md:pb-16">
           <div className="space-y-6 text-left">
-            <h1 id="project-name" className="text-4xl font-bold tracking-tight text-white uppercase leading-tight select-none" dangerouslySetInnerHTML={{ __html: projectData.name }}></h1>
+            <h1 id="project-name" className="text-3xl md:text-4xl font-bold tracking-tight text-white uppercase leading-tight break-words select-none" dangerouslySetInnerHTML={{ __html: projectData.name }}></h1>
             <div className="space-y-3 pt-4 border-t border-white/5 text-xs tracking-wide">
               <div className="flex justify-between border-b border-white/5 pb-2">
                 <span className="text-white/40 uppercase">Dự án</span>
@@ -122,7 +133,7 @@ export default function ProjectDetail() {
               </div>
               <div className="flex justify-between border-b border-white/5 pb-2">
                 <span className="text-white/40 uppercase">Vị trí</span>
-                <span id="info-location" className="text-white font-medium text-right">{projectData.location}</span>
+                <span id="info-location" className="text-white font-medium text-right ml-4">{projectData.location}</span>
               </div>
               <div className="flex justify-between border-b border-white/5 pb-2">
                 <span className="text-white/40 uppercase">Diện tích</span>
@@ -157,26 +168,26 @@ export default function ProjectDetail() {
       </main>
 
       {/* SECTION GALLERY 4 ẢNH CINEMATIC */}
-      <section id="gallery" className="max-w-5xl mx-auto px-6 md:px-12 pb-32 space-y-12 scroll-mt-24">
+      <section id="gallery" className="max-w-5xl mx-auto px-4 md:px-12 pb-24 md:pb-32 space-y-5 md:space-y-12 scroll-mt-24">
         
         {/* Ảnh 01 lớn (16/9) */}
-        <div className="project-fade group relative overflow-hidden rounded-2xl bg-zinc-900 border border-white/5 aspect-[16/9]">
+        <div className="project-fade group relative overflow-hidden rounded-2xl bg-zinc-900 border border-white/5 aspect-[4/3] md:aspect-[16/9]">
           <img id="gallery-img1" src={checkPath(projectData.img1)} alt="Banner 01" className="w-full h-full object-cover group-hover:scale-101 transition-transform duration-1000 block" />
         </div>
 
         {/* Cặp ảnh 02 và 03 đối xứng (Square) */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 w-full">
-          <div className="project-fade group relative overflow-hidden rounded-2xl bg-zinc-900 border border-white/5 aspect-square">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-5 md:gap-8 w-full">
+          <div className="project-fade group relative overflow-hidden rounded-2xl bg-zinc-900 border border-white/5 aspect-[4/3] md:aspect-square">
             <img id="gallery-img2" src={checkPath(projectData.img2 || projectData.img1)} alt="Gallery 02" className="w-full h-full object-cover group-hover:scale-101 transition-transform duration-1000 block" />
           </div>
-          <div className="project-fade group relative overflow-hidden rounded-2xl bg-zinc-900 border border-white/5 aspect-square">
+          <div className="project-fade group relative overflow-hidden rounded-2xl bg-zinc-900 border border-white/5 aspect-[4/3] md:aspect-square">
             <img id="gallery-img3" src={checkPath(projectData.img3 || projectData.img1)} alt="Gallery 03" className="w-full h-full object-cover group-hover:scale-101 transition-transform duration-1000 block" />
           </div>
         </div>
 
         {/* Khối trích dẫn Quote thương hiệu */}
         {projectData.quote && (
-          <div className="project-fade py-12 text-center max-w-3xl mx-auto select-none">
+          <div className="project-fade py-6 md:py-12 text-center max-w-3xl mx-auto select-none">
             <p id="project-quote" className="text-sm md:text-base italic text-white/60 font-light leading-relaxed tracking-wide">
               "{projectData.quote}"
             </p>
@@ -184,13 +195,16 @@ export default function ProjectDetail() {
         )}
 
         {/* Ảnh 04 chốt hạ (16/9) */}
-        <div className="project-fade group relative overflow-hidden rounded-2xl bg-zinc-900 border border-white/5 aspect-[16/9]">
+        <div className="project-fade group relative overflow-hidden rounded-2xl bg-zinc-900 border border-white/5 aspect-[4/3] md:aspect-[16/9]">
           <img id="gallery-img4" src={checkPath(projectData.img4 || projectData.img1)} alt="Closing 04" className="w-full h-full object-cover group-hover:scale-101 transition-transform duration-1000 block" />
         </div>
 
         {/* Nút quay lại */}
-        <div className="project-fade flex justify-center pt-12">
-          <button onClick={() => navigate('/portfolio')} className="inline-flex items-center gap-3 border border-white/20 bg-black/20 backdrop-blur-sm hover:bg-white hover:text-black hover:border-white px-8 py-4 rounded-full text-xs tracking-widest uppercase transition-all duration-300 cursor-pointer outline-none">
+        <div className="project-fade flex flex-col sm:flex-row items-stretch sm:items-center justify-center gap-3 pt-6 md:pt-12">
+          <button onClick={() => navigate('/ai-studio')} className="inline-flex items-center justify-center gap-2 bg-amber-400 hover:bg-amber-300 text-black px-8 py-4 min-h-12 rounded-full text-xs tracking-widest uppercase font-bold transition-all duration-300 cursor-pointer outline-none border-none">
+            Thử AI Studio cho không gian của bạn
+          </button>
+          <button onClick={() => navigate('/portfolio')} className="inline-flex items-center gap-3 border border-white/20 bg-black/20 backdrop-blur-sm hover:bg-white hover:text-black hover:border-white px-8 py-4 min-h-12 justify-center rounded-full text-xs tracking-widest uppercase transition-all duration-300 cursor-pointer outline-none">
             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor" className="w-4 h-4 transform rotate-180">
               <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
             </svg>
@@ -200,13 +214,13 @@ export default function ProjectDetail() {
       </section>
 
       {/* FOOTER */}
-      <footer id="contact" className="bg-black py-20 px-6 md:px-16 border-t border-white/5 w-full text-left">
-        <div className="w-full grid grid-cols-1 md:grid-cols-3 gap-16 text-sm text-gray-500 font-light leading-relaxed">
+      <footer id="contact" className="bg-black py-12 md:py-20 px-4 md:px-16 border-t border-white/5 w-full text-left">
+        <div className="w-full grid grid-cols-1 md:grid-cols-3 gap-10 md:gap-16 text-sm text-gray-500 font-light leading-relaxed">
           <div className="space-y-4">
             <h3 className="text-2xl font-bold text-white tracking-widest">MAC</h3>
             <p>📍 44 Nguyễn Văn Dung, Phường 6, Gò Vấp, TP. Hồ Chí Minh</p>
-            <p>📞 0375075975</p>
-            <p>✉️ maconcept.asia@gmail.com</p>
+            <p>📞 <a href="tel:0375075975" className="hover:text-white">0375075975</a></p>
+            <p>✉️ <a href="mailto:maconcept.asia@gmail.com" className="hover:text-white break-all">maconcept.asia@gmail.com</a></p>
           </div>
           <div className="space-y-3">
             <h4 className="text-white font-semibold tracking-wider uppercase mb-2">Dịch Vụ Chính</h4>
