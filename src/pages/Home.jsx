@@ -5,7 +5,10 @@ import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import { ScrollToPlugin } from 'gsap/ScrollToPlugin';
 import Header from '../components/Header';
 import MapEmbed from '../components/MapEmbed';
-import { initReveal, prefersReducedMotion } from '../utils/motion';
+import { initReveal, initParallax, prefersReducedMotion } from '../utils/motion';
+import RevealText from '../components/RevealText';
+import CountUp from '../components/CountUp';
+import usePageMeta from '../utils/usePageMeta';
 import { askFreeAI, askProAI, isPro, chatStorageKey } from '../utils/apiClient';
 
 gsap.registerPlugin(ScrollTrigger, ScrollToPlugin);
@@ -14,6 +17,10 @@ const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 
 export default function Home() {
   const navigate = useNavigate();
+  usePageMeta(
+    'MAC Concept - Thiết kế & thi công không gian F&B',
+    'MAC Concept thiết kế, thi công, setup và vận hành không gian F&B. Xem dự án nổi bật, dự toán chi phí sơ bộ và thử AI Studio.'
+  );
 
   const [homeCurrentIdx, setHomeCurrentIdx] = useState(0);
   const [portfolioData, setPortfolioData] = useState([]);
@@ -147,6 +154,8 @@ export default function Home() {
     const cleanup = initReveal();
     return cleanup;
   }, [portfolioData]);
+  // Thị sai nhẹ cho ảnh thẻ dự án (chạy lại khi dữ liệu dự án về)
+  useEffect(() => initParallax(document.getElementById('portfolio-grid') || document), [portfolioData]);
 
   useEffect(() => {
     const currentImg = document.querySelector('.home-slide.active .slide-img');
@@ -297,21 +306,21 @@ export default function Home() {
           <div className="absolute inset-0 bg-black/50 z-10 pointer-events-none"></div>
 
           <div className={`home-slide absolute inset-0 w-full h-full overflow-hidden transition-opacity duration-1000 ease-in-out opacity-0 ${homeCurrentIdx === 0 ? 'active opacity-100' : ''}`}>
-            <img src="/assets/pic/dedrip.jpg" alt="De Dripp Kafe" className="slide-img w-full h-full object-cover" />
+            <img src="/assets/pic/dedrip.jpg" alt="De Dripp Kafe" fetchPriority="high" decoding="async" className="slide-img w-full h-full object-cover" />
             <div className="absolute bottom-12 left-6 md:left-16 z-20 overflow-hidden">
               <span className="project-tag text-[11px] tracking-[0.25em] text-white/50 uppercase block">Dự án 01 / De Dripp Kafe</span>
             </div>
           </div>
 
           <div className={`home-slide absolute inset-0 w-full h-full overflow-hidden transition-opacity duration-1000 ease-in-out opacity-0 ${homeCurrentIdx === 1 ? 'active opacity-100' : ''}`}>
-            <img src="/assets/pic/themonic.jpg" alt="The Monic Coffee" className="slide-img w-full h-full object-cover" />
+            <img src="/assets/pic/themonic.jpg" alt="The Monic Coffee" loading="lazy" decoding="async" className="slide-img w-full h-full object-cover" />
             <div className="absolute bottom-12 left-6 md:left-16 z-20 overflow-hidden">
               <span className="project-tag text-[11px] tracking-[0.25em] text-white/50 uppercase block">Dự án 02 / The Monic Coffee</span>
             </div>
           </div>
 
           <div className={`home-slide absolute inset-0 w-full h-full overflow-hidden transition-opacity duration-1000 ease-in-out opacity-0 ${homeCurrentIdx === 2 ? 'active opacity-100' : ''}`}>
-            <img src="/assets/pic/Under.jpg" alt="Underhood Kafe" className="slide-img w-full h-full object-cover" />
+            <img src="/assets/pic/Under.jpg" alt="Underhood Kafe" loading="lazy" decoding="async" className="slide-img w-full h-full object-cover" />
             <div className="absolute bottom-12 left-6 md:left-16 z-20 overflow-hidden">
               <span className="project-tag text-[11px] tracking-[0.25em] text-white/50 uppercase block">Dự án 03 / Underhood Kafe</span>
             </div>
@@ -320,9 +329,13 @@ export default function Home() {
 
         <div className="relative z-20 max-w-5xl mx-auto text-center px-6 pointer-events-none">
           <span className="hero-anim text-[11px] md:text-sm font-semibold tracking-[0.18em] md:tracking-[0.35em] text-gray-300 uppercase mb-5 block">Thiết Kế • Thi Công • Setup • Vận Hành</span>
-          <h1 className="hero-anim text-3xl md:text-6xl font-bold tracking-tight text-white mb-6 leading-none select-none uppercase">
-            Sáng tạo không gian<br />Vận hành bản sắc.
-          </h1>
+          <RevealText
+            as="h1"
+            trigger="mount"
+            delay={0.2}
+            lines={['Sáng tạo không gian', 'Vận hành bản sắc.']}
+            className="text-3xl md:text-6xl font-bold tracking-tight text-white mb-6 leading-none select-none uppercase"
+          />
           <p className="hero-anim text-gray-200/80 text-sm md:text-lg font-light max-w-3xl mx-auto mb-8 md:mb-12 leading-relaxed tracking-wide">
             Hiện thực hóa những ý tưởng không gian F&B độc đáo mang tính nghệ thuật cao, tối ưu công năng vận hành thực tế.
           </p>
@@ -349,7 +362,7 @@ export default function Home() {
         <div className="flex flex-col justify-between h-full space-y-6">
           <div className="space-y-2">
             <span className="text-xs tracking-[0.3em] text-white/40 uppercase block">About Us</span>
-            <h2 className="text-4xl md:text-5xl font-light text-white tracking-tight leading-tight">More Artistic<br />Concept</h2>
+            <RevealText as="h2" lines={['More Artistic', 'Concept']} className="text-4xl md:text-5xl font-light text-white tracking-tight leading-tight" />
           </div>
           <div>
             <a href="/AboutDetail" className="group inline-flex items-center gap-3 text-xs tracking-widest uppercase font-semibold text-white/60 hover:text-white transition-colors duration-300">
@@ -378,12 +391,12 @@ export default function Home() {
       <section id="services" className="py-24 bg-[#0b0b0b] w-full border-y border-white/5 scroll-mt-20">
         <div className="px-6 md:px-16 mb-12 text-left select-none">
           <span className="text-xs tracking-[0.3em] text-white/40 uppercase block mb-1">Our Expertise</span>
-          <h2 className="text-3xl font-light text-white">Dịch Vụ Cung Cấp</h2>
+          <RevealText as="h2" text="Dịch Vụ Cung Cấp" className="text-3xl font-light text-white" />
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 border-t border-white/5 overflow-hidden w-full">
           <div data-reveal className="group relative p-8 md:p-10 bg-zinc-900/20 space-y-6 flex flex-col justify-between md:aspect-square border-r border-b lg:border-b-0 border-white/5 overflow-hidden cursor-pointer transition-all duration-500 text-left">
             <div className="absolute inset-0 bg-neutral-950/60 z-10 pointer-events-none"></div>
-            <img src="/assets/pic/ARCHI.jpg" alt="Thiết kế" className="absolute inset-0 w-full h-full object-cover opacity-35 group-hover:opacity-60 group-hover:scale-105 transition-all duration-700 ease-in-out z-0 block" />
+            <img src="/assets/pic/ARCHI.jpg" loading="lazy" decoding="async" alt="Thiết kế" className="absolute inset-0 w-full h-full object-cover opacity-35 group-hover:opacity-60 group-hover:scale-105 transition-all duration-700 ease-in-out z-0 block" />
             <span className="relative z-20 text-2xl font-bold text-white/10 font-mono transition-colors duration-500 group-hover:text-white/30">01</span>
             <div className="relative z-20 space-y-2">
               <h3 className="text-lg font-semibold text-white/80 transition-all duration-500 group-hover:text-white group-hover:-translate-y-1">Thiết Kế & Thi Công</h3>
@@ -392,7 +405,7 @@ export default function Home() {
           </div>
           <div data-reveal className="group relative p-8 md:p-10 bg-zinc-900/20 space-y-6 flex flex-col justify-between md:aspect-square border-r border-b lg:border-b-0 border-white/5 overflow-hidden cursor-pointer transition-all duration-500 text-left">
             <div className="absolute inset-0 bg-neutral-950/60 z-10 pointer-events-none"></div>
-            <img src="/assets/pic/SETUP.jpg" alt="Setup" className="absolute inset-0 w-full h-full object-cover opacity-35 group-hover:opacity-60 group-hover:scale-105 transition-all duration-700 ease-in-out z-0 block" />
+            <img src="/assets/pic/SETUP.jpg" loading="lazy" decoding="async" alt="Setup" className="absolute inset-0 w-full h-full object-cover opacity-35 group-hover:opacity-60 group-hover:scale-105 transition-all duration-700 ease-in-out z-0 block" />
             <span className="relative z-20 text-2xl font-bold text-white/10 font-mono transition-colors duration-500 group-hover:text-white/30">02</span>
             <div className="relative z-20 space-y-2">
               <h3 className="text-lg font-semibold text-white/80 transition-all duration-500 group-hover:text-white group-hover:-translate-y-1">Setup & Vận Hành</h3>
@@ -401,7 +414,7 @@ export default function Home() {
           </div>
           <div data-reveal className="group relative p-8 md:p-10 bg-zinc-900/20 space-y-6 flex flex-col justify-between md:aspect-square border-r border-b md:border-b-0 border-white/5 overflow-hidden cursor-pointer transition-all duration-500 text-left">
             <div className="absolute inset-0 bg-neutral-950/60 z-10 pointer-events-none"></div>
-            <img src="/assets/pic/MARKETING.jpg" alt="Marketing" className="absolute inset-0 w-full h-full object-cover opacity-35 group-hover:opacity-60 group-hover:scale-105 transition-all duration-700 ease-in-out z-0 block" />
+            <img src="/assets/pic/MARKETING.jpg" loading="lazy" decoding="async" alt="Marketing" className="absolute inset-0 w-full h-full object-cover opacity-35 group-hover:opacity-60 group-hover:scale-105 transition-all duration-700 ease-in-out z-0 block" />
             <span className="relative z-20 text-2xl font-bold text-white/10 font-mono transition-colors duration-500 group-hover:text-white/30">03</span>
             <div className="relative z-20 space-y-2">
               <h3 className="text-lg font-semibold text-white/80 transition-all duration-500 group-hover:text-white group-hover:-translate-y-1">Marketing</h3>
@@ -410,7 +423,7 @@ export default function Home() {
           </div>
           <div data-reveal className="group relative p-8 md:p-10 bg-zinc-900/20 space-y-6 flex flex-col justify-between md:aspect-square border-white/5 overflow-hidden cursor-pointer transition-all duration-500 text-left">
             <div className="absolute inset-0 bg-neutral-950/60 z-10 pointer-events-none"></div>
-            <img src="/assets/pic/BRANDING.jpg" alt="Branding" className="absolute inset-0 w-full h-full object-cover opacity-35 group-hover:opacity-60 group-hover:scale-105 transition-all duration-700 ease-in-out z-0 block" />
+            <img src="/assets/pic/BRANDING.jpg" loading="lazy" decoding="async" alt="Branding" className="absolute inset-0 w-full h-full object-cover opacity-35 group-hover:opacity-60 group-hover:scale-105 transition-all duration-700 ease-in-out z-0 block" />
             <span className="relative z-20 text-2xl font-bold text-white/10 font-mono transition-colors duration-500 group-hover:text-white/30">04</span>
             <div className="relative z-20 space-y-2">
               <h3 className="text-lg font-semibold text-white/80 transition-all duration-500 group-hover:text-white group-hover:-translate-y-1">Branding</h3>
@@ -424,8 +437,13 @@ export default function Home() {
       <section id="portfolio" className="fade-in-section py-24 px-6 md:px-16 w-full scroll-mt-20 text-left">
         <div className="flex items-end justify-between gap-3 border-b border-white/5 mb-8 md:mb-12 pb-5">
           <div>
-            <span className="text-xs tracking-[0.3em] text-white/40 uppercase block mb-1">Selected Works</span>
-            <h2 className="text-2xl md:text-3xl font-light text-white">Dự Án Nổi Bật</h2>
+            <span className="text-xs tracking-[0.3em] text-white/40 uppercase block mb-1">
+              Selected Works
+              {Array.isArray(portfolioData) && portfolioData.length > 0 && (
+                <span> · <CountUp value={portfolioData.length} /> dự án</span>
+              )}
+            </span>
+            <RevealText as="h2" text="Dự Án Nổi Bật" className="text-2xl md:text-3xl font-light text-white" />
           </div>
           <a href="/portfolio" className="shrink-0 text-xs tracking-widest uppercase border border-white/10 hover:border-white px-5 md:px-6 py-3 rounded-full text-white transition-all">Xem tất cả</a>
         </div>
@@ -447,8 +465,8 @@ export default function Home() {
             return (
               <div key={uniqueReactKey} data-reveal onClick={() => navigate(`/project-detail?id=${proj.breadcrumb}`)} className={`${colSpan} group relative overflow-hidden rounded-2xl bg-zinc-900 border border-white/5 cursor-pointer md:cursor-default md:min-h-[350px]`}>
                 <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-transparent z-10 pointer-events-none"></div>
-                <img src={fixImg1} alt={proj.name} loading="lazy" decoding="async" className="absolute inset-0 w-full h-full object-cover group-hover:scale-102 transition-transform duration-700 ease-in-out z-0 block" />
-                <img src={fixImg2} alt={`${proj.name} Hover`} loading="lazy" decoding="async" className="absolute inset-0 w-full h-full object-cover opacity-0 group-hover:opacity-100 transition-opacity duration-700 ease-in-out z-5 block" />
+                <img src={fixImg1} alt={proj.name} loading="lazy" decoding="async" data-parallax className="absolute inset-0 w-full h-full object-cover group-hover:scale-102 transition-[scale] duration-700 ease-in-out z-0 block" />
+                <img src={fixImg2} alt={`${proj.name} Hover`} loading="lazy" decoding="async" data-parallax className="absolute inset-0 w-full h-full object-cover opacity-0 group-hover:opacity-100 transition-opacity duration-700 ease-in-out z-5 block" />
 
                 <div className="absolute bottom-0 left-0 w-full p-5 md:p-8 z-20 flex justify-between items-end gap-3">
                   <div>
@@ -478,7 +496,7 @@ export default function Home() {
           <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 border-b border-white/5 pb-6">
             <div>
               <span className="text-[10px] tracking-[0.3em] text-white/40 uppercase block mb-1 font-mono">Execution Flow</span>
-              <h2 className="text-3xl font-light text-white uppercase">Quy Trình Triển Khai Dự Án</h2>
+              <RevealText as="h2" text="Quy Trình Triển Khai Dự Án" className="text-3xl font-light text-white uppercase" />
             </div>
             <p className="text-xs text-gray-500 font-light max-w-md">
               Mô hình quản trị công trình chuẩn mực từ khảo sát thực địa đến bàn giao chìa khóa trao tay.
@@ -1000,7 +1018,11 @@ export default function Home() {
           <h4 className="text-white font-semibold tracking-wider uppercase mb-5 text-sm">Văn Phòng MAC</h4>
           <MapEmbed />
         </div>
-        <p className="max-w-7xl mx-auto mt-10 pt-6 border-t border-white/5 text-[11px] text-neutral-600 tracking-wider">© 2026 MAC Concept - More Artistic Concept.</p>
+        <div className="max-w-7xl mx-auto mt-10 pt-6 border-t border-white/5 flex flex-wrap items-center gap-x-6 gap-y-2 text-[11px] text-neutral-600 tracking-wider">
+          <span>© 2026 MAC Concept - More Artistic Concept.</span>
+          <a href="/privacy" className="hover:text-white py-2">Chính sách bảo mật</a>
+          <a href="/terms" className="hover:text-white py-2">Điều khoản sử dụng</a>
+        </div>
       </footer>
     </div>
   );

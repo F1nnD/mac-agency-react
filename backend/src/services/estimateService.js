@@ -295,6 +295,48 @@ async function loadMaterialsWithPrices(city) {
   });
 }
 
+// -------------------------------------------------------------
+// Vật tư có định mức nhưng giá đã cũ hoặc chưa có báo giá
+// entries: [{ material, prices }] (cùng dạng loadMaterialsWithPrices)
+// Không đổi cách tính dự toán; chỉ để nhắc cập nhật giá.
+// -------------------------------------------------------------
+function findStaleMaterials(entries, { now = new Date(), days = PRICE_MAX_AGE_DAYS } = {}) {
+  const limit = Number.isFinite(Number(days)) && Number(days) > 0 ? Number(days) : PRICE_MAX_AGE_DAYS;
+  const out = [];
+  for (const { material, prices } of entries || []) {
+    if (!material || !(Number(material.normPerM2) > 0)) continue;
+    if (material.isActive === false) continue;
+
+    const dates = (prices || [])
+      .filter(p => Number(p.price) > 0 && p.priceDate && !Number.isNaN(new Date(p.priceDate).getTime()))
+      .map(p => new Date(p.priceDate).getTime());
+    const latest = dates.length ? Math.max(...dates) : null;
+    const daysSince = latest === null ? null : Math.max(0, Math.floor((now.getTime() - latest) / DAY_MS));
+
+    if (latest === null || daysSince >= limit) {
+      out.push({
+        _id: material._id,
+        code: material.code,
+        name: material.name,
+        category: material.category,
+        unit: material.unit,
+        normPerM2: material.normPerM2,
+        latestPriceDate: latest === null ? null : new Date(latest).toISOString(),
+        daysSince,
+        neverQuoted: latest === null
+      });
+    }
+  }
+  // Chưa có báo giá lên đầu, rồi đến báo giá cũ nhất
+  return out.sort((a, b) => (b.daysSince ?? Infinity) - (a.daysSince ?? Infinity) || String(a.code).localeCompare(String(b.code)));
+}
+
+async function loadStaleMaterials({ days, now = new Date() } = {}) {
+  // Gom tất cả báo giá (mọi khu vực): khu vực nào có giá mới thì vật tư coi như còn mới
+  const entries = await loadMaterialsWithPrices('');
+  return findStaleMaterials(entries, { now, days });
+}
+
 async function buildEstimateForPlan(floorPlan, concept) {
   const materials = await loadMaterialsWithPrices(floorPlan.city);
   return computeEstimate({
@@ -368,6 +410,9 @@ module.exports = {
   roundNice,
   buildEstimateForPlan,
   loadMaterialsWithPrices,
+  findStaleMaterials,
+  loadStaleMaterials,
+  PRICE_MAX_AGE_DAYS,
   upsertBoqDraft,
   SITE_FACTORS,
   CONTINGENCY_PCT

@@ -37,3 +37,36 @@ export function initReveal(root = document) {
   });
   return () => triggers.forEach((t) => t.kill());
 }
+
+/**
+ * Hệ số biên độ chuyển động: 0 = tắt (giảm chuyển động), 0.5 = cảm ứng, 1 = chuột.
+ */
+export const motionScale = () => (prefersReducedMotion() ? 0 : isTouchDevice() ? 0.5 : 1);
+
+/**
+ * Thị sai nhẹ: ảnh [data-parallax] dịch chậm hơn nội dung khi cuộn.
+ * Ảnh phải nằm trong khung overflow-hidden; ảnh được phóng sẵn 1.08 nên không hở mép
+ * (biên độ tối đa 3.5% < 4% phần dư mỗi bên). Cảm ứng: giảm một nửa biên độ.
+ * Trả về hàm dọn dẹp (kill ScrollTrigger và trả style về ban đầu).
+ */
+export function initParallax(root = document, selector = '[data-parallax]') {
+  const k = motionScale();
+  if (!k) return () => {};
+  const imgs = Array.from(root.querySelectorAll(selector));
+  if (!imgs.length) return () => {};
+  const amp = 3.5 * k;
+  const ctx = gsap.context(() => {
+    imgs.forEach((img) => {
+      const box = img.parentElement;
+      if (!box) return;
+      gsap.fromTo(img,
+        { scale: 1.08, yPercent: -amp },
+        {
+          yPercent: amp,
+          ease: 'none',
+          scrollTrigger: { trigger: box, start: 'top bottom', end: 'bottom top', scrub: true }
+        });
+    });
+  });
+  return () => ctx.revert();
+}

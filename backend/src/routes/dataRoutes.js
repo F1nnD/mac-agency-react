@@ -10,9 +10,11 @@ const Material = require('../models/Material');
 const MarketPrice = require('../models/MarketPrice');
 const BOQ = require('../models/BOQ');
 
+const storage = require('../services/storageService');
 const { calcTotals } = require('../services/estimateService');
 const { refreshEngagementSafe } = require('../services/engagementService');
 const { summarizeLead, processLeadsInBackground } = require('../services/leadService');
+const { canEditLead } = require('../services/crmService');
 
 const isStaff = user => ['admin', 'staff'].includes(user?.role);
 const isValidId = id => mongoose.isValidObjectId(id);
@@ -26,8 +28,19 @@ const MAX_IMAGE_CHARS = 3 * 1024 * 1024;
 function cleanImages(images) {
   if (!Array.isArray(images)) return [];
   return images
-    .filter(src => typeof src === 'string' && /^data:image\/(png|jpe?g|webp);base64,/.test(src) && src.length <= MAX_IMAGE_CHARS)
+    .filter(src => typeof src === 'string' && src.length <= MAX_IMAGE_CHARS &&
+      (/^data:image\/(png|jpe?g|webp);base64,/.test(src) || storage.isAllowedRemoteUrl(src)))
     .slice(0, MAX_IMAGES);
+}
+
+// Nếu kho ảnh đã cấu hình: tải từng ảnh base64 lên và lưu URL (giữ database nhỏ); lỗi thì giữ base64 như cũ
+async function storeImages(images) {
+  if (!storage.isConfigured()) return images;
+  return Promise.all(images.map(async src => {
+    if (!src.startsWith('data:')) return src;
+    const up = await storage.uploadImage(src, { folder: 'floorplans' });
+    return up ? up.url : src;
+  }));
 }
 
 // ============================================================
@@ -48,7 +61,7 @@ router.post('/floor-plans', verifyToken, async (req, res) => {
       width,
       length,
       totalArea: Math.round(width * length * 100) / 100,
-      images: cleanImages(req.body.images)
+      images: await storeImages(cleanImages(req.body.images))
     });
     refreshEngagementSafe(req.user.userId);
 
@@ -95,7 +108,7 @@ router.put('/floor-plans/:id', verifyToken, async (req, res) => {
 
     const update = pick(req.body, ['projectName', 'address', 'city', 'district', 'siteStatus', 'notes']);
     if (isStaff(req.user) && req.body.status !== undefined) update.status = req.body.status;
-    if (req.body.images !== undefined) update.images = cleanImages(req.body.images);
+    if (req.body.images !== undefined) update.images = await storeImages(cleanImages(req.body.images));
 
     const width = req.body.width !== undefined ? Number(req.body.width) : floorPlan.width;
     const length = req.body.length !== undefined ? Number(req.body.length) : floorPlan.length;
@@ -235,7 +248,11 @@ router.get('/leads/:id', verifyToken, requireRole('admin', 'staff'), async (req,
 router.put('/leads/:id', verifyToken, requireRole('admin', 'staff'), async (req, res) => {
   try {
     if (!isValidId(req.params.id)) return fail(res, 'Mã không hợp lệ.');
-    const update = pick(req.body, ['status', 'assignedTo', 'interestedService', 'message']);
+    const current = await Lead.findById(req.params.id);
+    if (!current) return fail(res, 'Không tìm thấy', 404);
+    if (!canEditLead(req.user, current)) return fail(res, 'Lead này do nhân viên khác phụ trách.', 403);
+    // assignedTo chỉ đổi qua /api/crm/leads/:id/assign (có kiểm tra người nhận)
+    const update = pick(req.body, ['status', 'interestedService', 'message']);
     const updated = await Lead.findByIdAndUpdate(req.params.id, update, { new: true, runValidators: true });
     if (!updated) return fail(res, 'Không tìm thấy', 404);
     res.json({ success: true, data: updated });
@@ -252,6 +269,7 @@ router.post('/leads/:id/notes', verifyToken, requireRole('admin', 'staff'), asyn
 
     const lead = await Lead.findById(req.params.id);
     if (!lead) return fail(res, 'Không tìm thấy', 404);
+    if (!canEditLead(req.user, lead)) return fail(res, 'Lead này do nhân viên khác phụ trách.', 403);
 
     lead.salesNotes.push({ note, author: req.user.username });
     await lead.save();

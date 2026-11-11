@@ -82,6 +82,8 @@ router.put('/:id', async (req, res) => {
     if (req.body.password) {
       if (String(req.body.password).length < 8) return fail(res, 'Mật khẩu tối thiểu 8 ký tự.');
       update.password = await bcrypt.hash(String(req.body.password), 10);
+      update.passwordChangedAt = new Date(); // đăng xuất mọi phiên cũ
+      update.resetTokenHash = undefined;
     }
 
     const updated = await User.findByIdAndUpdate(req.params.id, update, { new: true }).select('-password');

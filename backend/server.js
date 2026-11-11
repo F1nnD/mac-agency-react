@@ -36,6 +36,10 @@ const dataRoutes = require('./src/routes/dataRoutes');
 const statsRoutes = require('./src/routes/statsRoutes');
 const studioRoutes = require('./src/routes/studioRoutes');
 const userRoutes = require('./src/routes/userRoutes');
+const shareRoutes = require('./src/routes/shareRoutes');
+const importRoutes = require('./src/routes/importRoutes');
+const crmRoutes = require('./src/routes/crmRoutes');
+const { persistRenderImage } = require('./src/services/storageService');
 
 // ===== MODEL DRAFT (INLINE) =====
 const draftSchema = new mongoose.Schema({
@@ -71,20 +75,24 @@ app.use(cors({
 
 // 2. MIDDLEWARE CƠ BẢN
 app.use(helmet({ crossOriginResourcePolicy: false }));
+// Giới hạn tần suất chung đặt TRƯỚC bộ đọc body để chặn gửi body lớn hàng loạt
+const limiter = (windowMs, max) => rateLimit({ windowMs, max, standardHeaders: true, legacyHeaders: false });
+app.use('/api', limiter(15 * 60 * 1000, 500));
 // Chỉ route dữ liệu (có ảnh mặt bằng dạng base64) mới cần body lớn; còn lại giới hạn nhỏ
 app.use('/api/data', express.json({ limit: '16mb' }));
 app.use(express.json({ limit: '1mb' }));
 app.use(express.urlencoded({ limit: '1mb', extended: true }));
 
 // 3. RATE LIMIT
-const limiter = (windowMs, max) => rateLimit({ windowMs, max, standardHeaders: true, legacyHeaders: false });
-app.use('/api', limiter(15 * 60 * 1000, 500));
 app.use('/api/auth/login', limiter(15 * 60 * 1000, 20));
 app.use('/api/auth/register', limiter(60 * 60 * 1000, 20));
 app.use('/api/ai-free', limiter(60 * 1000, 15));
 app.use('/api/ai-pro', limiter(60 * 1000, 15));
 app.use('/api/ai-admin', limiter(60 * 1000, 30));
 app.use('/api/studio/render', limiter(60 * 1000, 6));
+app.use('/api/share', limiter(60 * 1000, 60));
+app.use('/api/auth/forgot-password', limiter(60 * 60 * 1000, 10));
+app.use('/api/auth/reset-password', limiter(60 * 60 * 1000, 20));
 
 // 4. MOUNT ROUTES
 app.use('/api/settings', settingsRoutes);
@@ -95,6 +103,9 @@ app.use('/api/data', dataRoutes);
 app.use('/api/stats', statsRoutes);
 app.use('/api/studio', studioRoutes);
 app.use('/api/users', userRoutes);
+app.use('/api/share', shareRoutes);
+app.use('/api/import', importRoutes);
+app.use('/api/crm', crmRoutes);
 
 // 5. KẾT NỐI DB
 connectDB().then(() => console.log('DB Ready')).catch(err => console.error('Lỗi DB:', err.message));
@@ -192,6 +203,9 @@ app.post('/api/ai-pro', optionalAuth, requirePro, proGate, async (req, res) => {
       await recordUsage(req, {
         endpoint: '/api/ai-pro', requestType: 'render', generatedImage: true, userMessage: `${space} - ${style} - ${numArea}m2`
       });
+
+      // Lưu bền ảnh phối cảnh lên kho ảnh (chạy nền, không chặn phản hồi)
+      if (render?._id) setImmediate(() => persistRenderImage(render._id).catch(() => {}));
 
       return res.json({
         success: true,

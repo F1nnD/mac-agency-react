@@ -1,0 +1,20 @@
+User-agent: *
+Allow: /$
+Allow: /packages
+Allow: /about-detail
+Allow: /AboutDetail
+Allow: /privacy
+Allow: /terms
+Disallow: /admin
+Disallow: /ai-studio
+Disallow: /board
+Disallow: /share
+Disallow: /login
+Disallow: /register
+Disallow: /index
+Disallow: /home
+Disallow: /portfolio
+Disallow: /project-detail
+Disallow: /pricing
+
+Sitemap: https://moreactisticconcept.onrender.com/sitemap.xml

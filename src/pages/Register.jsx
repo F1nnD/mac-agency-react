@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import gsap from 'gsap';
-import { registerUser } from '../utils/apiClient';
+import { registerWithConsent } from '../utils/apiAuth';
+import ConsentCheckbox from '../components/ConsentCheckbox';
 
 export default function Register() {
   const navigate = useNavigate();
@@ -11,6 +12,7 @@ export default function Register() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
+  const [consent, setConsent] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -23,8 +25,13 @@ export default function Register() {
     e.preventDefault();
     setError('');
 
-    if (password.length < 6) {
-      setError('Mật khẩu phải có ít nhất 6 ký tự.');
+    if (password.length < 8) {
+      setError('Mật khẩu phải có ít nhất 8 ký tự.');
+      return;
+    }
+
+    if (!consent) {
+      setError('Bạn cần đồng ý với Chính sách quyền riêng tư và Điều khoản sử dụng.');
       return;
     }
 
@@ -36,7 +43,7 @@ export default function Register() {
     setLoading(true);
 
     try {
-      const data = await registerUser({ username, password, fullName, email });
+      const data = await registerWithConsent({ username, password, fullName, email: email.trim(), consent });
 
       gsap.to('.register-box-anim', {
         duration: 0.5,
@@ -93,18 +100,20 @@ export default function Register() {
               value={fullName}
               onChange={(e) => setFullName(e.target.value)}
               placeholder="Nguyễn Văn A"
-              className="w-full bg-zinc-900/20 border border-white/10 rounded-xl px-4 py-3 text-xs text-white placeholder-neutral-700 focus:outline-none focus:border-white/30 transition-all"
+              className="w-full bg-zinc-900/20 border border-white/10 rounded-xl px-4 py-3 min-h-11 text-xs text-white placeholder-neutral-700 focus:outline-none focus:border-white/30 transition-all"
             />
           </div>
 
           <div className="space-y-1.5">
-            <label className="text-[10px] uppercase tracking-wider text-gray-400 font-semibold block">Email</label>
+            <label className="text-[10px] uppercase tracking-wider text-gray-400 font-semibold block">Email *</label>
             <input
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
+              required
+              autoComplete="email"
               placeholder="email@example.com"
-              className="w-full bg-zinc-900/20 border border-white/10 rounded-xl px-4 py-3 text-xs text-white placeholder-neutral-700 focus:outline-none focus:border-white/30 transition-all"
+              className="w-full bg-zinc-900/20 border border-white/10 rounded-xl px-4 py-3 min-h-11 text-xs text-white placeholder-neutral-700 focus:outline-none focus:border-white/30 transition-all"
             />
           </div>
 
@@ -117,7 +126,7 @@ export default function Register() {
               required
               placeholder="khach01"
               autoComplete="username"
-              className="w-full bg-zinc-900/20 border border-white/10 rounded-xl px-4 py-3 text-xs text-white font-mono placeholder-neutral-700 focus:outline-none focus:border-white/30 transition-all"
+              className="w-full bg-zinc-900/20 border border-white/10 rounded-xl px-4 py-3 min-h-11 text-xs text-white font-mono placeholder-neutral-700 focus:outline-none focus:border-white/30 transition-all"
             />
           </div>
 
@@ -131,7 +140,7 @@ export default function Register() {
                 required
                 placeholder="••••••••"
                 autoComplete="new-password"
-                className="w-full bg-zinc-900/20 border border-white/10 rounded-xl px-4 py-3 text-xs text-white font-mono placeholder-neutral-700 focus:outline-none focus:border-white/30 transition-all"
+                className="w-full bg-zinc-900/20 border border-white/10 rounded-xl px-4 py-3 min-h-11 text-xs text-white font-mono placeholder-neutral-700 focus:outline-none focus:border-white/30 transition-all"
               />
             </div>
 
@@ -144,14 +153,16 @@ export default function Register() {
                 required
                 placeholder="••••••••"
                 autoComplete="new-password"
-                className="w-full bg-zinc-900/20 border border-white/10 rounded-xl px-4 py-3 text-xs text-white font-mono placeholder-neutral-700 focus:outline-none focus:border-white/30 transition-all"
+                className="w-full bg-zinc-900/20 border border-white/10 rounded-xl px-4 py-3 min-h-11 text-xs text-white font-mono placeholder-neutral-700 focus:outline-none focus:border-white/30 transition-all"
               />
             </div>
           </div>
 
+          <ConsentCheckbox checked={consent} onChange={setConsent} />
+
           <button
             type="submit"
-            disabled={loading}
+            disabled={loading || !consent}
             className="w-full bg-white hover:bg-neutral-200 text-black text-xs font-bold uppercase tracking-widest py-4 rounded-xl transition-all duration-300 shadow-lg flex items-center justify-center gap-2 cursor-pointer border-none outline-none disabled:opacity-50 mt-2"
           >
             {loading ? 'Đang tạo tài khoản...' : 'Đăng ký ngay'}
@@ -164,6 +175,10 @@ export default function Register() {
             Đăng nhập
           </Link>
         </div>
+
+        <p className="text-[11px] text-neutral-500 text-center">
+          <Link to="/privacy" className="text-amber-400 hover:text-amber-300 underline underline-offset-2">Chính sách quyền riêng tư</Link>
+        </p>
 
         <p className="text-[9px] italic text-neutral-600 text-center select-none">
           * Tài khoản mặc định là Free. Nâng cấp Pro để dùng AI tạo phối cảnh 3D.

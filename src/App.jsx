@@ -12,6 +12,13 @@ import Register from './pages/Register';
 import Pricing from './pages/Pricing';
 import Dashboard from './pages/Dashboard';
 import AIStudio from './pages/AIStudio';
+import ForgotPassword from './pages/ForgotPassword';
+import ResetPassword from './pages/ResetPassword';
+import Privacy from './pages/Privacy';
+import Terms from './pages/Terms';
+import SharedRender from './pages/SharedRender';
+import ConceptBoard from './pages/ConceptBoard';
+import PageTransition from './components/PageTransition';
 import ProtectedRoute from './components/ProtectedRoute';
 import CustomerRoute from './components/CustomerRoute';
 import './index.css';
@@ -19,12 +26,18 @@ import './index.css';
 export default function App() {
   return (
     <Router>
+      <PageTransition>
       <Routes>
         {/* Public */}
         <Route path="/" element={<Welcome />} />
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
         <Route path="/packages" element={<Packages />} />
+        <Route path="/forgot-password" element={<ForgotPassword />} />
+        <Route path="/reset-password" element={<ResetPassword />} />
+        <Route path="/privacy" element={<Privacy />} />
+        <Route path="/terms" element={<Terms />} />
+        <Route path="/share/:token" element={<SharedRender />} />
         <Route path="/about-detail" element={<AboutDetail />} />
         <Route path="/AboutDetail" element={<AboutDetail />} />
 
@@ -35,6 +48,7 @@ export default function App() {
         <Route path="/project-detail" element={<CustomerRoute><ProjectDetail /></CustomerRoute>} />
         <Route path="/pricing" element={<CustomerRoute><Pricing /></CustomerRoute>} />
         <Route path="/ai-studio" element={<CustomerRoute><AIStudio /></CustomerRoute>} />
+        <Route path="/board/:id" element={<CustomerRoute><ConceptBoard /></CustomerRoute>} />
 
         {/* Admin */}
         <Route path="/admin/login" element={<Login />} />
@@ -47,6 +61,7 @@ export default function App() {
           }
         />
       </Routes>
+      </PageTransition>
     </Router>
   );
 }

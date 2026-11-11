@@ -75,6 +75,11 @@ const LeadSchema = new mongoose.Schema({
     default: null
   },
 
+  // Lịch gọi lại và lần liên hệ gần nhất (telesale)
+  followUpAt: { type: Date, default: null, index: true },
+  followUpNote: { type: String, default: '', trim: true, maxlength: 500 },
+  lastContactAt: { type: Date, default: null },
+
   // Tóm tắt AI cho telesale (tự tạo khi khách để lại thông tin, làm mới sau mỗi lần render)
   aiSummary: {
     type: mongoose.Schema.Types.Mixed,

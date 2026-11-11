@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { studioApi } from '../utils/apiClient';
 import { EstimateCard, AnalysisSections } from './RenderResult';
+import ShareActions from './ShareActions';
 
 const TIER_LABEL = { free: 'Free', pro: 'Pro', staff: 'Nhân viên', admin: 'Quản trị' };
 const formatBillion = (n) => {
@@ -99,6 +100,7 @@ function DetailModal({ id, onClose, onChanged, onRerender }) {
 
               <EstimateCard estimate={item.estimate} />
               <AnalysisSections analysis={item.analysis} />
+              <ShareActions renderId={item._id} title={item.title} />
 
               <div className="flex flex-col sm:flex-row gap-3 pt-4 border-t border-white/5">
                 <a href={item.imageUrl} target="_blank" rel="noreferrer" className="min-h-12 inline-flex items-center justify-center border border-white/10 text-[10px] font-bold uppercase tracking-widest px-5 rounded-xl hover:border-white transition-all">Mở ảnh gốc</a>

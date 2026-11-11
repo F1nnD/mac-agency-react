@@ -1,17 +1,21 @@
 import React, { useEffect, useState } from 'react';
 import { dataApi } from '../../utils/apiClient';
+import { TableSkeleton, EmptyState, ErrorState } from './AdminTable';
 
 export default function ConceptsTab() {
   const [concepts, setConcepts] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
   const fetchConcepts = async () => {
     setLoading(true);
+    setError('');
     try {
       const res = await dataApi.getConcepts();
       setConcepts(res.data || []);
     } catch (err) {
       console.error(err);
+      setError(err.message || 'Lỗi tải danh sách concept.');
     } finally {
       setLoading(false);
     }
@@ -23,7 +27,7 @@ export default function ConceptsTab() {
 
   return (
     <div className="tab-content-anim space-y-8 w-full">
-      <div className="flex items-center justify-between border-b border-white/5 pb-5">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/5 pb-5">
         <div>
           <span className="text-[10px] tracking-[0.3em] text-white/30 uppercase font-semibold">
             Concept Management
@@ -32,19 +36,21 @@ export default function ConceptsTab() {
             Quản lý Ý tưởng Khách hàng
           </h1>
         </div>
-        <button onClick={fetchConcepts} className="border border-white/10 bg-black/20 text-[10px] font-bold uppercase tracking-widest px-5 py-3 rounded-xl hover:border-white transition-all">Tải lại</button>
+        <button onClick={fetchConcepts} className="border border-white/10 bg-black/20 text-[10px] font-bold uppercase tracking-widest px-5 min-h-11 rounded-xl hover:border-white transition-all cursor-pointer">Tải lại</button>
       </div>
 
+      <ErrorState message={error} onRetry={fetchConcepts} />
+
       {loading ? (
-        <div className="text-center py-20 text-white/30 text-xs uppercase">Đang tải...</div>
+        <TableSkeleton rows={3} />
       ) : concepts.length === 0 ? (
-        <div className="text-center py-20 border border-dashed border-white/10 rounded-2xl text-white/40 text-sm">Chưa có concept nào</div>
+        !error && <EmptyState>Chưa có concept nào</EmptyState>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {concepts.map(c => (
-            <div key={c._id} className="bg-zinc-900/20 border border-white/5 p-6 rounded-2xl flex flex-col justify-between hover:border-white/20 transition-all">
+            <div key={c._id} className="bg-zinc-900/20 border border-white/5 p-4 md:p-6 rounded-2xl flex flex-col justify-between hover:border-white/20 transition-all">
               <div>
-                <div className="flex justify-between items-start mb-4">
+                <div className="flex justify-between items-start gap-3 mb-4">
                   <div>
                     <span className="text-[10px] uppercase tracking-wider text-gray-500 block mb-1">Style Concept</span>
                     <h3 className="text-lg font-bold text-white">{c.style}</h3>

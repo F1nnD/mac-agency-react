@@ -3,6 +3,10 @@ import { useNavigate } from 'react-router-dom';
 import gsap from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import Header from '../components/Header';
+import RevealText from '../components/RevealText';
+import CountUp from '../components/CountUp';
+import usePageMeta from '../utils/usePageMeta';
+import { initParallax } from '../utils/motion';
 
 gsap.registerPlugin(ScrollTrigger);
 
@@ -10,6 +14,10 @@ const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 
 export default function Portfolio() {
   const navigate = useNavigate();
+  usePageMeta(
+    'Dự án nổi bật - MAC Concept',
+    'Hồ sơ năng lực và các dự án thiết kế, thi công không gian F&B, biệt thự nhà vườn và cảnh quan của MAC Concept.'
+  );
   const [portfolioData, setPortfolioData] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -43,6 +51,9 @@ export default function Portfolio() {
     }
   }, [portfolioData]);
 
+  // Thị sai nhẹ cho ảnh thẻ dự án
+  useEffect(() => initParallax(document.getElementById('full-portfolio-grid') || document), [portfolioData, loading]);
+
   return (
     <div className="w-full min-h-screen bg-[#0b0b0b] text-gray-300 antialiased overflow-x-hidden font-sans">
       <Header showBackBtn={true} />
@@ -50,7 +61,10 @@ export default function Portfolio() {
       <main className="pt-28 md:pt-32 pb-24 px-4 md:px-12 min-h-screen text-left max-w-7xl mx-auto w-full">
         <div className="mb-16 text-center md:text-left select-none">
           <span className="text-[10px] tracking-[0.4em] text-white/30 uppercase block mb-3 font-semibold">Portfolio Architecture</span>
-          <h1 className="text-2xl font-light text-white uppercase mt-1">Hồ sơ năng lực dự án phát triển</h1>
+          <RevealText as="h1" trigger="mount" text="Hồ sơ năng lực dự án phát triển" className="text-2xl font-light text-white uppercase mt-1" />
+          {Array.isArray(portfolioData) && portfolioData.length > 0 && (
+            <p className="text-xs text-white/40 mt-3"><CountUp value={portfolioData.length} /> dự án</p>
+          )}
         </div>
 
         {loading ? (
@@ -83,8 +97,8 @@ export default function Portfolio() {
                 >
                   <div className="absolute inset-0 bg-gradient-to-t from-black/95 via-black/40 to-transparent z-10 pointer-events-none"></div>
                   
-                  <img src={fixImg1} alt={proj.name} loading="lazy" decoding="async" className="absolute inset-0 w-full h-full object-cover group-hover:scale-102 transition-transform duration-700 ease-in-out z-0 block" />
-                  <img src={fixImg2} alt={`${proj.name} Hover`} loading="lazy" decoding="async" className="absolute inset-0 w-full h-full object-cover opacity-0 group-hover:opacity-100 transition-opacity duration-700 ease-in-out z-5 block" />
+                  <img src={fixImg1} alt={proj.name} loading="lazy" decoding="async" data-parallax className="absolute inset-0 w-full h-full object-cover group-hover:scale-102 transition-[scale] duration-700 ease-in-out z-0 block" />
+                  <img src={fixImg2} alt={`${proj.name} Hover`} loading="lazy" decoding="async" data-parallax className="absolute inset-0 w-full h-full object-cover opacity-0 group-hover:opacity-100 transition-opacity duration-700 ease-in-out z-5 block" />
                   
                   <div className="absolute bottom-0 left-0 w-full p-5 md:p-8 z-20 flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
                     <div className="text-left flex-1 max-w-[80%]">

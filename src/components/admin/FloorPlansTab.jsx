@@ -1,5 +1,7 @@
 import React, { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { dataApi } from '../../utils/apiClient';
+import { TableSkeleton, EmptyState, ErrorState } from './AdminTable';
 
 export default function FloorPlansTab() {
   const [floorPlans, setFloorPlans] = useState([]);
@@ -24,10 +26,20 @@ export default function FloorPlansTab() {
     fetchFloorPlans();
   }, []);
 
+  // Modal chi tiết: khoá cuộn nền và đóng bằng ESC
+  useEffect(() => {
+    if (!selectedFP) return undefined;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    const onKey = (e) => { if (e.key === 'Escape') setSelectedFP(null); };
+    window.addEventListener('keydown', onKey);
+    return () => { document.body.style.overflow = prev; window.removeEventListener('keydown', onKey); };
+  }, [selectedFP]);
+
   return (
     <div className="tab-content-anim space-y-8 w-full">
       {/* HEADER */}
-      <div className="flex items-center justify-between border-b border-white/5 pb-5">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/5 pb-5">
         <div>
           <span className="text-[10px] tracking-[0.3em] text-white/30 uppercase font-semibold">
             Floor Plan Management
@@ -38,26 +50,18 @@ export default function FloorPlansTab() {
         </div>
         <button
           onClick={fetchFloorPlans}
-          className="border border-white/10 bg-black/20 text-[10px] font-bold uppercase tracking-widest px-5 py-3 rounded-xl hover:border-white transition-all cursor-pointer"
+          className="border border-white/10 bg-black/20 text-[10px] font-bold uppercase tracking-widest px-5 min-h-11 rounded-xl hover:border-white transition-all cursor-pointer"
         >
           Tải lại
         </button>
       </div>
 
-      {error && (
-        <div className="bg-red-500/10 border border-red-500/20 text-red-400 text-xs px-4 py-3 rounded-xl">
-          {error}
-        </div>
-      )}
+      <ErrorState message={error} onRetry={fetchFloorPlans} />
 
       {loading ? (
-        <div className="text-center py-20 text-white/30 text-xs tracking-widest uppercase">
-          Đang tải dữ liệu...
-        </div>
+        <TableSkeleton rows={3} />
       ) : floorPlans.length === 0 ? (
-        <div className="text-center py-20 bg-zinc-900/20 border border-dashed border-white/10 rounded-2xl">
-          <p className="text-white/40 text-sm">Chưa có mặt bằng nào</p>
-        </div>
+        <EmptyState>Chưa có mặt bằng nào</EmptyState>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {floorPlans.map(fp => (
@@ -100,7 +104,7 @@ export default function FloorPlansTab() {
 
                 <button
                   onClick={() => setSelectedFP(fp)}
-                  className="w-full mt-4 border border-white/10 bg-black/20 text-[10px] font-bold uppercase py-2 rounded-lg hover:bg-white hover:text-black transition-all"
+                  className="w-full mt-4 min-h-11 border border-white/10 bg-black/20 text-[10px] font-bold uppercase rounded-lg cursor-pointer hover:bg-white hover:text-black transition-all"
                 >
                   Xem chi tiết
                 </button>
@@ -111,15 +115,15 @@ export default function FloorPlansTab() {
       )}
 
       {/* MODAL CHI TIẾT */}
-      {selectedFP && (
-        <div className="fixed inset-0 bg-black/90 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setSelectedFP(null)}>
-          <div className="bg-zinc-950 border border-white/10 rounded-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
-            <div className="sticky top-0 bg-zinc-950 border-b border-white/5 p-5 flex justify-between items-center z-10">
-              <h2 className="text-lg font-bold text-white uppercase">{selectedFP.projectName}</h2>
-              <button onClick={() => setSelectedFP(null)} className="text-white/40 hover:text-white text-xl">×</button>
+      {selectedFP && createPortal(
+        <div className="fixed inset-0 bg-black/90 z-50 flex items-stretch md:items-center justify-center p-0 md:p-4" onClick={() => setSelectedFP(null)}>
+          <div role="dialog" aria-modal="true" aria-label={selectedFP.projectName} className="bg-zinc-950 border-0 md:border border-white/10 md:rounded-2xl md:max-w-4xl w-full h-dvh md:h-auto md:max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+            <div className="sticky top-0 bg-zinc-950 border-b border-white/5 p-4 md:p-5 flex justify-between items-center gap-3 z-10">
+              <h2 className="text-base md:text-lg font-bold text-white uppercase break-words min-w-0">{selectedFP.projectName}</h2>
+              <button onClick={() => setSelectedFP(null)} aria-label="Đóng" className="w-11 h-11 shrink-0 flex items-center justify-center rounded-xl border border-white/10 text-white/60 hover:text-white text-xl cursor-pointer">×</button>
             </div>
             
-            <div className="p-6 space-y-6">
+            <div className="p-4 md:p-6 space-y-6 pb-10">
               {/* ALBUM ẢNH */}
               <div>
                 <h3 className="text-[10px] uppercase tracking-widest text-white/40 font-bold mb-3">Hình ảnh hiện trạng</h3>
@@ -140,19 +144,19 @@ export default function FloorPlansTab() {
               <div>
                 <h3 className="text-[10px] uppercase tracking-widest text-white/40 font-bold mb-3">Thông tin chi tiết</h3>
                 <div className="space-y-2 text-xs bg-black/40 p-4 rounded-xl border border-white/5">
-                  <div className="flex justify-between border-b border-white/5 pb-2">
+                  <div className="flex flex-col sm:flex-row sm:justify-between gap-1 border-b border-white/5 pb-2">
                     <span className="text-gray-500">Kích thước:</span>
                     <span className="text-white font-mono">{selectedFP.width}m x {selectedFP.length}m = {selectedFP.totalArea} m²</span>
                   </div>
-                  <div className="flex justify-between border-b border-white/5 pb-2">
+                  <div className="flex flex-col sm:flex-row sm:justify-between gap-1 border-b border-white/5 pb-2">
                     <span className="text-gray-500">Địa chỉ:</span>
                     <span className="text-white">{selectedFP.address}</span>
                   </div>
-                  <div className="flex justify-between border-b border-white/5 pb-2">
+                  <div className="flex flex-col sm:flex-row sm:justify-between gap-1 border-b border-white/5 pb-2">
                     <span className="text-gray-500">Khu vực:</span>
                     <span className="text-white">{selectedFP.district}, {selectedFP.city}</span>
                   </div>
-                  <div className="flex justify-between">
+                  <div className="flex flex-col sm:flex-row sm:justify-between gap-1">
                     <span className="text-gray-500">Hiện trạng:</span>
                     <span className="text-amber-400 font-semibold">{selectedFP.siteStatus === 'dat-trong' ? 'Đất trống' : 'Có nhà trên đất'}</span>
                   </div>
@@ -168,7 +172,8 @@ export default function FloorPlansTab() {
               )}
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

@@ -1,5 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { dataApi } from '../../utils/apiClient';
+import ImportDialog from './ImportDialog';
+import StalePricesBanner from './StalePricesBanner';
 
 const CATEGORY_OPTIONS = [
   { value: 'ket-cau', label: 'Kết cấu' },
@@ -27,6 +29,8 @@ export default function MaterialsTab() {
   const [form, setForm] = useState(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [showImport, setShowImport] = useState(false);
+  const [staleKey, setStaleKey] = useState(0);
 
   const fetchMaterials = async () => {
     setLoading(true);
@@ -93,7 +97,7 @@ export default function MaterialsTab() {
 
   return (
     <div className="tab-content-anim space-y-8 w-full">
-      <div className="flex items-center justify-between border-b border-white/5 pb-5">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-white/5 pb-5">
         <div>
           <span className="text-[10px] tracking-[0.3em] text-white/30 uppercase font-semibold">Material Management</span>
           <h1 className="text-2xl font-light text-white uppercase mt-1">Kho Vật Tư (BOQ)</h1>
@@ -101,13 +105,16 @@ export default function MaterialsTab() {
             Định mức là khối lượng vật tư cho mỗi m² sàn. Vật tư có định mức lớn hơn 0 và có báo giá sẽ được AI dùng để dự toán sơ bộ.
           </p>
         </div>
-        <div className="flex gap-3">
+        <div className="flex flex-wrap gap-3">
+          <button onClick={() => setShowImport(true)} className="min-h-[44px] border border-white/10 bg-black/20 text-[10px] font-bold uppercase tracking-widest px-5 rounded-xl hover:border-white transition-all">Nhập từ file</button>
           <button onClick={() => setShowForm(v => !v)} className="bg-amber-400 text-black text-[10px] font-bold uppercase tracking-widest px-5 py-3 rounded-xl hover:bg-amber-300 transition-all">
             {showForm ? 'Đóng' : '+ Thêm vật tư'}
           </button>
           <button onClick={fetchMaterials} className="border border-white/10 bg-black/20 text-[10px] font-bold uppercase tracking-widest px-5 py-3 rounded-xl hover:border-white transition-all">Tải lại</button>
         </div>
       </div>
+
+      <StalePricesBanner refreshKey={staleKey} />
 
       {error && <div className="bg-red-500/10 border border-red-500/20 text-red-400 text-xs px-4 py-3 rounded-xl">{error}</div>}
 
@@ -146,8 +153,8 @@ export default function MaterialsTab() {
       ) : filtered.length === 0 ? (
         <div className="text-center py-20 border border-dashed border-white/10 rounded-2xl text-white/40 text-sm">Chưa có vật tư nào</div>
       ) : (
-        <div className="bg-zinc-900/20 border border-white/5 rounded-2xl overflow-hidden">
-          <table className="w-full text-left border-collapse">
+        <div className="bg-zinc-900/20 border border-white/5 rounded-2xl overflow-x-auto">
+          <table className="w-full min-w-[640px] text-left border-collapse">
             <thead>
               <tr className="bg-black/40 border-b border-white/10 text-[10px] uppercase tracking-widest text-gray-400">
                 <th className="p-4 font-bold">Mã</th>
@@ -181,6 +188,14 @@ export default function MaterialsTab() {
             </tbody>
           </table>
         </div>
+      )}
+
+      {showImport && (
+        <ImportDialog
+          kind="materials"
+          onClose={() => setShowImport(false)}
+          onDone={() => { fetchMaterials(); setStaleKey(k => k + 1); }}
+        />
       )}
     </div>
   );

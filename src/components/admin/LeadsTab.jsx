@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
-import { leadsApi } from '../../utils/apiClient';
+import { leadsApi, getCurrentUser } from '../../utils/apiClient';
+import { isOverdue, formatDateTimeVN } from '../../utils/apiCrm';
 import LeadDetailModal from './LeadDetailModal';
+import FollowUpsPanel from './FollowUpsPanel';
 
 const STATUS_OPTIONS = [
   { value: '', label: 'Tất cả' },
@@ -27,6 +29,12 @@ const STATUS_COLOR = {
   lost: 'text-red-400 border-red-400/40 bg-red-400/10'
 };
 
+const ASSIGN_OPTIONS = [
+  { value: 'mine', label: 'Của tôi' },
+  { value: 'unassigned', label: 'Chưa giao' },
+  { value: 'all', label: 'Tất cả' }
+];
+
 const SERVICE_LABEL = {
   'thiet-ke': 'Chỉ thiết kế',
   'thi-cong': 'Chỉ thi công',
@@ -42,6 +50,9 @@ export default function LeadsTab() {
   const [statusFilter, setStatusFilter] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedLead, setSelectedLead] = useState(null);
+  const [assignFilter, setAssignFilter] = useState('all');
+  const [panelKey, setPanelKey] = useState(0);
+  const myId = String(getCurrentUser()?.userId || '');
 
   const fetchLeads = async () => {
     setLoading(true);
@@ -78,8 +89,12 @@ export default function LeadsTab() {
     converted: leads.filter(l => l.status === 'converted').length
   };
 
-  // Filter theo search
+  const ownerOf = l => String(l.assignedTo?._id || l.assignedTo || '');
+
+  // Filter theo người phụ trách và search
   const filteredLeads = leads.filter(l => {
+    if (assignFilter === 'mine' && ownerOf(l) !== myId) return false;
+    if (assignFilter === 'unassigned' && ownerOf(l)) return false;
     if (!searchTerm) return true;
     const term = searchTerm.toLowerCase();
     return (
@@ -92,7 +107,7 @@ export default function LeadsTab() {
   return (
     <div className="tab-content-anim space-y-8 w-full">
       {/* HEADER */}
-      <div className="flex items-center justify-between border-b border-white/5 pb-5">
+      <div className="flex items-center justify-between gap-3 border-b border-white/5 pb-5">
         <div>
           <span className="text-[10px] tracking-[0.3em] text-white/30 uppercase font-semibold">
             Lead Management
@@ -102,12 +117,18 @@ export default function LeadsTab() {
           </h1>
         </div>
         <button
-          onClick={fetchLeads}
-          className="border border-white/10 bg-black/20 text-[10px] font-bold uppercase tracking-widest px-5 py-3 rounded-xl hover:border-white transition-all cursor-pointer"
+          onClick={() => { fetchLeads(); setPanelKey(k => k + 1); }}
+          className="min-h-[44px] border border-white/10 bg-black/20 text-[10px] font-bold uppercase tracking-widest px-5 py-3 rounded-xl hover:border-white transition-all cursor-pointer"
         >
           Tải lại
         </button>
       </div>
+
+      {/* CẦN GỌI HÔM NAY */}
+      <FollowUpsPanel
+        refreshKey={panelKey}
+        onOpenLead={(l) => setSelectedLead(leads.find(x => x._id === l._id) || l)}
+      />
 
       {/* THỐNG KÊ */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -141,11 +162,26 @@ export default function LeadsTab() {
           />
         </div>
         <div className="flex gap-2 flex-wrap">
+          {ASSIGN_OPTIONS.map(opt => (
+            <button
+              key={opt.value}
+              onClick={() => setAssignFilter(opt.value)}
+              className={`min-h-[44px] px-4 rounded-xl text-[10px] font-bold uppercase tracking-wider transition-all ${
+                assignFilter === opt.value
+                  ? 'bg-amber-400 text-black'
+                  : 'bg-black/40 text-amber-400/80 border border-amber-400/20 hover:border-amber-400/50'
+              }`}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+        <div className="flex gap-2 flex-wrap">
           {STATUS_OPTIONS.map(opt => (
             <button
               key={opt.value}
               onClick={() => setStatusFilter(opt.value)}
-              className={`px-4 py-3 rounded-xl text-[10px] font-bold uppercase tracking-wider transition-all ${
+              className={`min-h-[44px] px-4 rounded-xl text-[10px] font-bold uppercase tracking-wider transition-all ${
                 statusFilter === opt.value
                   ? 'bg-white text-black'
                   : 'bg-black/40 text-gray-400 border border-white/10 hover:border-white/30'
@@ -187,9 +223,9 @@ export default function LeadsTab() {
                   <h3 className="text-sm font-bold text-white uppercase truncate">
                     {lead.fullName}
                   </h3>
-                  <p className="text-[10px] text-gray-500 font-mono mt-1">
+                  <a href={`tel:${lead.phone}`} className="inline-block text-[11px] text-cyan-400 font-mono mt-1 hover:text-cyan-300">
                     {lead.phone}
-                  </p>
+                  </a>
                 </div>
                 <span className={`text-[9px] font-bold uppercase tracking-wider px-2 py-1 rounded border shrink-0 ${STATUS_COLOR[lead.status] || ''}`}>
                   {STATUS_LABEL[lead.status] || lead.status}
@@ -208,6 +244,20 @@ export default function LeadsTab() {
                     {lead.engagement?.score || 0}/100
                   </span>
                 </div>
+                <div className="flex justify-between gap-3">
+                  <span className="text-gray-500">Phụ trách:</span>
+                  <span className={lead.assignedTo ? 'text-white truncate' : 'text-gray-600'}>
+                    {lead.assignedTo ? (lead.assignedTo.fullName || lead.assignedTo.username) : 'Chưa giao'}
+                  </span>
+                </div>
+                {lead.followUpAt && !['converted', 'lost'].includes(lead.status) && (
+                  <div className="flex justify-between gap-3">
+                    <span className="text-gray-500">Gọi lại:</span>
+                    <span className={`font-mono ${isOverdue(lead) ? 'text-red-400 font-bold' : 'text-white'}`}>
+                      {isOverdue(lead) ? 'Quá hạn · ' : ''}{formatDateTimeVN(lead.followUpAt)}
+                    </span>
+                  </div>
+                )}
                 <div className="flex justify-between">
                   <span className="text-gray-500">Ngày tạo:</span>
                   <span className="text-white font-mono">
@@ -220,13 +270,13 @@ export default function LeadsTab() {
               <div className="flex gap-2 pt-4 mt-4 border-t border-white/5">
                 <button
                   onClick={() => setSelectedLead(lead)}
-                  className="flex-1 border border-white/10 bg-black/20 text-[10px] font-bold uppercase py-2 rounded-lg hover:bg-white hover:text-black transition-all"
+                  className="flex-1 min-h-[44px] border border-white/10 bg-black/20 text-[10px] font-bold uppercase rounded-lg hover:bg-white hover:text-black transition-all"
                 >
                   Xem chi tiết
                 </button>
                 <a
                   href={`tel:${lead.phone}`}
-                  className="border border-cyan-500/40 bg-cyan-500/10 text-[10px] font-bold uppercase text-cyan-400 px-3 py-2 rounded-lg hover:bg-cyan-500 hover:text-black transition-all"
+                  className="min-h-[44px] min-w-[64px] flex items-center justify-center border border-cyan-500/40 bg-cyan-500/10 text-[10px] font-bold uppercase text-cyan-400 px-3 rounded-lg hover:bg-cyan-500 hover:text-black transition-all"
                 >
                   Gọi
                 </a>
@@ -241,7 +291,7 @@ export default function LeadsTab() {
         <LeadDetailModal
           lead={selectedLead}
           onClose={() => setSelectedLead(null)}
-          onUpdate={fetchLeads}
+          onUpdate={() => { fetchLeads(); setPanelKey(k => k + 1); }}
         />
       )}
     </div>

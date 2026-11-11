@@ -5,6 +5,9 @@ import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import { ScrollToPlugin } from 'gsap/ScrollToPlugin';
 import Header from '../components/Header';
 import MapEmbed from '../components/MapEmbed';
+import RevealText from '../components/RevealText';
+import usePageMeta from '../utils/usePageMeta';
+import { initParallax } from '../utils/motion';
 gsap.registerPlugin(ScrollTrigger, ScrollToPlugin);
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
@@ -14,6 +17,11 @@ export default function ProjectDetail() {
   const location = useLocation();
   const [projectData, setProjectData] = useState(null);
   const [failed, setFailed] = useState(false);
+  const plainName = projectData?.name ? String(projectData.name).replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim() : '';
+  usePageMeta(
+    plainName ? `${plainName} - MAC Concept` : null,
+    plainName ? `Dự án ${plainName}${projectData.type ? ` (${projectData.type})` : ''}${projectData.location ? ` tại ${projectData.location}` : ''} do MAC Concept thiết kế và thi công.` : null
+  );
 
   // =========================================================================
   // 1. THUẬT TOÁN ĐỌC API REALTIME TỪ DATABASE QUA SLUG BREADCRUMB
@@ -81,6 +89,12 @@ export default function ProjectDetail() {
     }
   }, [projectData]);
 
+  // Thị sai nhẹ cho ảnh gallery
+  useEffect(() => {
+    if (!projectData) return undefined;
+    return initParallax(document.getElementById('gallery') || document);
+  }, [projectData]);
+
   const handleScrollToGallery = (e) => {
     e.preventDefault();
     const targetElement = document.querySelector('#gallery');
@@ -126,7 +140,7 @@ export default function ProjectDetail() {
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8 md:gap-12 border-b border-white/5 pb-10 md:pb-16">
           <div className="space-y-6 text-left">
-            <h1 id="project-name" className="text-3xl md:text-4xl font-bold tracking-tight text-white uppercase leading-tight break-words select-none" dangerouslySetInnerHTML={{ __html: projectData.name }}></h1>
+            <RevealText as="h1" id="project-name" trigger="mount" html={projectData.name} className="text-3xl md:text-4xl font-bold tracking-tight text-white uppercase leading-tight break-words select-none" />
             <div className="space-y-3 pt-4 border-t border-white/5 text-xs tracking-wide">
               <div className="flex justify-between border-b border-white/5 pb-2">
                 <span className="text-white/40 uppercase">Dự án</span>
@@ -173,16 +187,16 @@ export default function ProjectDetail() {
         
         {/* Ảnh 01 lớn (16/9) */}
         <div className="project-fade group relative overflow-hidden rounded-2xl bg-zinc-900 border border-white/5 aspect-[4/3] md:aspect-[16/9]">
-          <img id="gallery-img1" src={checkPath(projectData.img1)} alt="Banner 01" className="w-full h-full object-cover group-hover:scale-101 transition-transform duration-1000 block" />
+          <img id="gallery-img1" src={checkPath(projectData.img1)} alt="Banner 01" loading="lazy" decoding="async" data-parallax className="w-full h-full object-cover group-hover:scale-101 transition-[scale] duration-1000 block" />
         </div>
 
         {/* Cặp ảnh 02 và 03 đối xứng (Square) */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-5 md:gap-8 w-full">
           <div className="project-fade group relative overflow-hidden rounded-2xl bg-zinc-900 border border-white/5 aspect-[4/3] md:aspect-square">
-            <img id="gallery-img2" src={checkPath(projectData.img2 || projectData.img1)} alt="Gallery 02" className="w-full h-full object-cover group-hover:scale-101 transition-transform duration-1000 block" />
+            <img id="gallery-img2" src={checkPath(projectData.img2 || projectData.img1)} alt="Gallery 02" loading="lazy" decoding="async" data-parallax className="w-full h-full object-cover group-hover:scale-101 transition-[scale] duration-1000 block" />
           </div>
           <div className="project-fade group relative overflow-hidden rounded-2xl bg-zinc-900 border border-white/5 aspect-[4/3] md:aspect-square">
-            <img id="gallery-img3" src={checkPath(projectData.img3 || projectData.img1)} alt="Gallery 03" className="w-full h-full object-cover group-hover:scale-101 transition-transform duration-1000 block" />
+            <img id="gallery-img3" src={checkPath(projectData.img3 || projectData.img1)} alt="Gallery 03" loading="lazy" decoding="async" data-parallax className="w-full h-full object-cover group-hover:scale-101 transition-[scale] duration-1000 block" />
           </div>
         </div>
 
@@ -197,7 +211,7 @@ export default function ProjectDetail() {
 
         {/* Ảnh 04 chốt hạ (16/9) */}
         <div className="project-fade group relative overflow-hidden rounded-2xl bg-zinc-900 border border-white/5 aspect-[4/3] md:aspect-[16/9]">
-          <img id="gallery-img4" src={checkPath(projectData.img4 || projectData.img1)} alt="Closing 04" className="w-full h-full object-cover group-hover:scale-101 transition-transform duration-1000 block" />
+          <img id="gallery-img4" src={checkPath(projectData.img4 || projectData.img1)} alt="Closing 04" loading="lazy" decoding="async" data-parallax className="w-full h-full object-cover group-hover:scale-101 transition-[scale] duration-1000 block" />
         </div>
 
         {/* Nút quay lại */}
@@ -232,6 +246,10 @@ export default function ProjectDetail() {
         </div>
         <div className="mt-12">
           <MapEmbed />
+        </div>
+        <div className="mt-8 pt-6 border-t border-white/5 flex flex-wrap gap-x-6 gap-y-2 text-[11px] text-neutral-600 tracking-wider">
+          <a href="/privacy" className="hover:text-white py-2">Chính sách bảo mật</a>
+          <a href="/terms" className="hover:text-white py-2">Điều khoản sử dụng</a>
         </div>
       </footer>
     </div>

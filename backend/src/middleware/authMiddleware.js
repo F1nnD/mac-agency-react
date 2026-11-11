@@ -20,9 +20,16 @@ function extractToken(req) {
 // Giải mã token và đọc quyền MỚI NHẤT từ DB để:
 //  - tài khoản bị khoá có hiệu lực ngay (không đợi token hết hạn)
 //  - đổi quyền (nâng Pro, cấp staff...) có hiệu lực ngay
+// iat tính bằng giây; so với mốc đổi mật khẩu (làm tròn xuống giây)
+function isStaleToken(decoded, user) {
+  if (!user.passwordChangedAt) return false;
+  const changedSec = Math.floor(new Date(user.passwordChangedAt).getTime() / 1000);
+  return !decoded.iat || decoded.iat < changedSec;
+}
+
 async function resolveUser(token) {
   const decoded = jwt.verify(token, process.env.JWT_SECRET);
-  const user = await User.findById(decoded.userId).select('username role isActive proExpiresAt');
+  const user = await User.findById(decoded.userId).select('username role isActive proExpiresAt passwordChangedAt');
   if (!user) {
     const e = new Error('Người dùng không tồn tại');
     e.name = 'UserGone';
@@ -31,6 +38,12 @@ async function resolveUser(token) {
   if (!user.isActive) {
     const e = new Error('Tài khoản đã bị khoá');
     e.name = 'InactiveUser';
+    throw e;
+  }
+  // Token cấp trước lúc đổi mật khẩu thì không còn giá trị (đăng xuất mọi thiết bị)
+  if (isStaleToken(decoded, user)) {
+    const e = new Error('Token đã bị thu hồi do đổi mật khẩu');
+    e.name = 'StaleToken';
     throw e;
   }
   return {
@@ -62,7 +75,7 @@ const verifyToken = async (req, res, next) => {
     if (error.name === 'InactiveUser') {
       return res.status(401).json({ success: false, message: 'Tài khoản đã bị khoá. Vui lòng liên hệ quản trị viên.' });
     }
-    if (error.name === 'UserGone' || error.name === 'JsonWebTokenError' || error.name === 'NotBeforeError') {
+    if (error.name === 'UserGone' || error.name === 'StaleToken' || error.name === 'JsonWebTokenError' || error.name === 'NotBeforeError') {
       return res.status(401).json({ success: false, message: 'Token không hợp lệ.' });
     }
     console.error('Lỗi xác thực:', error.message);
@@ -141,5 +154,7 @@ module.exports = {
   requireRole,
   optionalAuth,
   requirePro,
-  effectiveRole
+  effectiveRole,
+  isStaleToken,
+  resolveUser
 };

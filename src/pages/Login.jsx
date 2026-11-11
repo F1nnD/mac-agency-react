@@ -104,7 +104,13 @@ export default function Login() {
             />
           </div>
 
-          <div className="pt-2">
+          <div className="text-right -mt-2">
+            <Link to="/forgot-password" className="inline-flex items-center min-h-11 text-[12px] text-amber-400 hover:text-amber-300">
+              Quên mật khẩu?
+            </Link>
+          </div>
+
+          <div className="pt-0">
             <button
               type="submit"
               disabled={loading}
@@ -123,6 +129,11 @@ export default function Login() {
           <Link to="/register" className="text-emerald-400 hover:text-emerald-300 font-semibold">
             Đăng ký ngay
           </Link>
+          <div className="mt-2">
+            <Link to="/privacy" className="inline-flex items-center min-h-11 text-neutral-500 hover:text-amber-400 underline underline-offset-2">
+              Chính sách quyền riêng tư
+            </Link>
+          </div>
         </div>
       </div>
     </div>

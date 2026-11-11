@@ -1,5 +1,7 @@
-import React, { useState } from 'react';
-import { leadsApi } from '../../utils/apiClient';
+import React, { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
+import { leadsApi, getCurrentUser } from '../../utils/apiClient';
+import { crmApi, zaloUrl, toLocalInput, fromLocalInput, formatDateTimeVN, isOverdue } from '../../utils/apiCrm';
 
 const STATUS_OPTIONS = [
   { value: 'new', label: 'Mới' },
@@ -17,8 +19,74 @@ const SERVICE_LABEL = {
   'khac': 'Khác'
 };
 
-export default function LeadDetailModal({ lead, onClose, onUpdate }) {
-  const [status, setStatus] = useState(lead.status);
+export default function LeadDetailModal({ lead: leadProp, onClose, onUpdate }) {
+  const [lead, setLead] = useState(leadProp);
+  const [status, setStatus] = useState(leadProp.status);
+  const [staff, setStaff] = useState([]);
+  const [followAt, setFollowAt] = useState(toLocalInput(leadProp.followUpAt));
+  const [followNote, setFollowNote] = useState(leadProp.followUpNote || '');
+  const [callNote, setCallNote] = useState('');
+  const [crmBusy, setCrmBusy] = useState(false);
+  const [crmMsg, setCrmMsg] = useState('');
+  const [copied, setCopied] = useState(false);
+
+  const me = getCurrentUser();
+  const ownerId = String(lead.assignedTo?._id || lead.assignedTo || '');
+  const canEdit = me?.role === 'admin' || !ownerId || ownerId === String(me?.userId || '');
+
+  useEffect(() => {
+    crmApi.staff().then(res => setStaff(res.data || [])).catch(() => setStaff([]));
+  }, []);
+
+  // Gộp dữ liệu lead mới từ API CRM vào bản đang xem
+  const applyLead = (data) => {
+    if (!data) return;
+    setLead(prev => ({ ...prev, ...data, aiSummary: prev.aiSummary }));
+    if (data.status) setStatus(data.status);
+    setFollowAt(toLocalInput(data.followUpAt));
+    setFollowNote(data.followUpNote || '');
+    if (onUpdate) onUpdate();
+  };
+
+  const runCrm = async (fn, okMsg) => {
+    setCrmBusy(true); setCrmMsg(''); setError('');
+    try {
+      const res = await fn();
+      applyLead(res.data);
+      if (okMsg) setCrmMsg(okMsg);
+    } catch (err) {
+      setError(err.message || 'Thao tác không thành công.');
+    } finally {
+      setCrmBusy(false);
+    }
+  };
+
+  const handleAssign = (userId) => runCrm(() => crmApi.assign(lead._id, userId), 'Đã cập nhật người phụ trách.');
+  const handleSaveFollowUp = () => runCrm(() => crmApi.followUp(lead._id, fromLocalInput(followAt), followNote), followAt ? 'Đã đặt lịch gọi lại.' : 'Đã xoá lịch gọi lại.');
+  const handleCalled = async () => {
+    await runCrm(
+      () => crmApi.contact(lead._id, { note: callNote.trim() || undefined, followUpAt: fromLocalInput(followAt) && new Date(fromLocalInput(followAt)) > new Date() ? fromLocalInput(followAt) : undefined }),
+      'Đã ghi nhận cuộc gọi.'
+    );
+    setCallNote('');
+  };
+
+  const handleCopyScript = async () => {
+    const text = aiSummary?.openingScript;
+    if (!text) return;
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      document.body.appendChild(ta);
+      ta.select();
+      try { document.execCommand('copy'); } catch { /* bỏ qua */ }
+      ta.remove();
+    }
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
   const [note, setNote] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -53,7 +121,8 @@ export default function LeadDetailModal({ lead, onClose, onUpdate }) {
     setSaving(true);
     setError('');
     try {
-      await leadsApi.addNote(lead._id, note.trim());
+      const res = await leadsApi.addNote(lead._id, note.trim());
+      if (res?.data?.salesNotes) setLead(prev => ({ ...prev, salesNotes: res.data.salesNotes }));
       setNote('');
       if (onUpdate) onUpdate();
       alert('Đã thêm ghi chú.');
@@ -64,13 +133,13 @@ export default function LeadDetailModal({ lead, onClose, onUpdate }) {
     }
   };
 
-  return (
+  return createPortal(
     <div
-      className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+      className="fixed inset-0 bg-black/80 z-50 md:flex md:items-center md:justify-center md:p-4"
       onClick={onClose}
     >
       <div
-        className="bg-zinc-950 border border-white/10 rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto"
+        className="bg-zinc-950 md:border border-white/10 md:rounded-2xl md:max-w-2xl w-full h-full md:h-auto md:max-h-[90vh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
         {/* HEADER */}
@@ -85,7 +154,8 @@ export default function LeadDetailModal({ lead, onClose, onUpdate }) {
           </div>
           <button
             onClick={onClose}
-            className="text-white/40 hover:text-white w-8 h-8 flex items-center justify-center rounded-lg border border-white/10 hover:border-white/30 transition-all text-lg"
+            aria-label="Đóng"
+            className="text-white/40 hover:text-white w-11 h-11 shrink-0 flex items-center justify-center rounded-lg border border-white/10 hover:border-white/30 transition-all text-lg"
           >
             ×
           </button>
@@ -93,6 +163,96 @@ export default function LeadDetailModal({ lead, onClose, onUpdate }) {
 
         {/* BODY */}
         <div className="p-6 space-y-6 text-left">
+
+          {/* LIÊN LẠC NHANH */}
+          <div className="grid grid-cols-3 gap-2">
+            <a href={`tel:${lead.phone}`} className="min-h-[44px] flex items-center justify-center border border-cyan-500/40 bg-cyan-500/10 text-cyan-400 text-[10px] font-bold uppercase tracking-widest rounded-xl hover:bg-cyan-500 hover:text-black transition-all">Gọi</a>
+            <a href={zaloUrl(lead.phone)} target="_blank" rel="noopener noreferrer" className="min-h-[44px] flex items-center justify-center border border-blue-400/40 bg-blue-400/10 text-blue-400 text-[10px] font-bold uppercase tracking-widest rounded-xl hover:bg-blue-400 hover:text-black transition-all">Zalo</a>
+            <button
+              onClick={handleCopyScript}
+              disabled={!aiSummary?.openingScript}
+              title={aiSummary?.openingScript ? 'Sao chép lời mở đầu cuộc gọi' : 'Cần tạo tóm tắt AI trước'}
+              className="min-h-[44px] border border-amber-400/40 bg-amber-400/10 text-amber-400 text-[10px] font-bold uppercase tracking-widest rounded-xl hover:bg-amber-400 hover:text-black transition-all disabled:opacity-40"
+            >
+              {copied ? 'Đã chép' : 'Chép lời mở'}
+            </button>
+          </div>
+
+          {/* PHỤ TRÁCH & GỌI LẠI */}
+          <div>
+            <h3 className="text-[10px] uppercase tracking-widest text-white/40 font-bold mb-3">Phụ trách và lịch gọi lại</h3>
+            <div className="bg-zinc-900/40 border border-white/5 rounded-xl p-4 space-y-3">
+              {!canEdit && (
+                <p className="text-[11px] text-amber-400">Lead này do {lead.assignedTo?.fullName || lead.assignedTo?.username || 'đồng nghiệp'} phụ trách; bạn chỉ xem.</p>
+              )}
+              <label className="block">
+                <span className="text-[9px] uppercase tracking-widest text-white/30 font-bold">Người phụ trách</span>
+                <select
+                  value={ownerId}
+                  disabled={!canEdit || crmBusy}
+                  onChange={e => handleAssign(e.target.value)}
+                  className="mt-1 w-full min-h-[44px] bg-black/40 border border-white/10 rounded-xl px-4 text-xs text-white focus:outline-none focus:border-white/30 disabled:opacity-50"
+                >
+                  <option value="">Chưa giao</option>
+                  {staff.map(u => <option key={u.id} value={u.id}>{u.name}{u.role === 'admin' ? ' (admin)' : ''}</option>)}
+                  {ownerId && !staff.some(u => u.id === ownerId) && <option value={ownerId}>{lead.assignedTo?.fullName || lead.assignedTo?.username || 'Nhân viên khác'}</option>}
+                </select>
+              </label>
+
+              <label className="block">
+                <span className="text-[9px] uppercase tracking-widest text-white/30 font-bold">
+                  Ngày giờ gọi lại (giờ VN){isOverdue(lead) ? ' · ĐÃ QUÁ HẠN' : ''}
+                </span>
+                <input
+                  type="datetime-local"
+                  value={followAt}
+                  disabled={!canEdit || crmBusy}
+                  onChange={e => setFollowAt(e.target.value)}
+                  className={`mt-1 w-full min-h-[44px] bg-black/40 border rounded-xl px-4 text-xs text-white focus:outline-none disabled:opacity-50 ${isOverdue(lead) ? 'border-red-400/50' : 'border-white/10 focus:border-white/30'}`}
+                />
+              </label>
+              <input
+                type="text"
+                value={followNote}
+                disabled={!canEdit || crmBusy}
+                onChange={e => setFollowNote(e.target.value)}
+                maxLength={500}
+                placeholder="Việc cần làm khi gọi lại (không bắt buộc)"
+                className="w-full min-h-[44px] bg-black/40 border border-white/10 rounded-xl px-4 text-xs text-white focus:outline-none focus:border-white/30 disabled:opacity-50"
+              />
+              <button
+                onClick={handleSaveFollowUp}
+                disabled={!canEdit || crmBusy}
+                className="w-full min-h-[44px] border border-white/10 bg-black/20 text-[10px] font-bold uppercase tracking-widest rounded-xl hover:border-white transition-all disabled:opacity-40"
+              >
+                {followAt ? 'Lưu lịch gọi lại' : 'Xoá lịch gọi lại'}
+              </button>
+
+              <div className="border-t border-white/5 pt-3 space-y-2">
+                <input
+                  type="text"
+                  value={callNote}
+                  disabled={!canEdit || crmBusy}
+                  onChange={e => setCallNote(e.target.value)}
+                  placeholder="Ghi chú nhanh sau cuộc gọi (không bắt buộc)"
+                  className="w-full min-h-[44px] bg-black/40 border border-white/10 rounded-xl px-4 text-xs text-white focus:outline-none focus:border-emerald-400/50 disabled:opacity-50"
+                />
+                <button
+                  onClick={handleCalled}
+                  disabled={!canEdit || crmBusy}
+                  className="w-full min-h-[44px] bg-emerald-400 hover:bg-emerald-300 text-black text-[10px] font-bold uppercase tracking-widest rounded-xl transition-all disabled:opacity-40"
+                >
+                  {crmBusy ? 'Đang lưu...' : 'Đã gọi'}
+                </button>
+                <p className="text-[10px] text-gray-600">
+                  {lead.lastContactAt ? `Liên hệ gần nhất: ${formatDateTimeVN(lead.lastContactAt)}. ` : 'Chưa ghi nhận cuộc gọi nào. '}
+                  Bấm "Đã gọi" sẽ xoá lịch gọi lại đã tới hạn; muốn hẹn tiếp, chọn giờ mới ở trên rồi bấm "Đã gọi".
+                </p>
+              </div>
+              {crmMsg && <p className="text-[11px] text-emerald-400">{crmMsg}</p>}
+              {error && <p className="text-[11px] text-red-400">{error}</p>}
+            </div>
+          </div>
 
           {/* TÓM TẮT AI CHO TELESALE */}
           <div>
@@ -143,7 +303,7 @@ export default function LeadDetailModal({ lead, onClose, onUpdate }) {
             <div className="space-y-2 text-xs">
               <div className="flex justify-between border-b border-white/5 pb-2">
                 <span className="text-gray-500">Số điện thoại:</span>
-                <a href={`tel:${lead.phone}`} className="text-cyan-400 font-mono hover:text-cyan-300">
+                <a href={`tel:${lead.phone}`} className="text-cyan-400 font-mono hover:text-cyan-300 py-1">
                   {lead.phone}
                 </a>
               </div>
@@ -219,7 +379,7 @@ export default function LeadDetailModal({ lead, onClose, onUpdate }) {
                 <button
                   key={opt.value}
                   onClick={() => handleStatusChange(opt.value)}
-                  className={`px-4 py-2.5 rounded-xl text-[10px] font-bold uppercase tracking-wider transition-all ${
+                  className={`min-h-[44px] px-4 rounded-xl text-[10px] font-bold uppercase tracking-wider transition-all ${
                     status === opt.value
                       ? 'bg-emerald-400 text-black'
                       : 'bg-black/40 text-gray-400 border border-white/10 hover:border-white/30'
@@ -281,6 +441,7 @@ export default function LeadDetailModal({ lead, onClose, onUpdate }) {
 
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

@@ -1,5 +1,7 @@
 import React, { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { api } from '../../utils/apiClient';
+import { TableSkeleton, ErrorState, useToast } from './AdminTable';
 
 const DEFAULT_SETTINGS = {
   companyName: 'MAC CONCEPT',
@@ -15,20 +17,25 @@ export default function SettingsTab() {
   const [settings, setSettings] = useState(DEFAULT_SETTINGS);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [message, setMessage] = useState({ type: '', text: '' });
+  const [loadError, setLoadError] = useState('');
+  const { toast, node: toastNode } = useToast();
+
+  async function loadSettings() {
+    setLoading(true);
+    setLoadError('');
+    try {
+      const res = await api.get('/api/settings');
+      // Hợp nhất dữ liệu từ DB với default (phòng trường hợp DB trống)
+      setSettings(prev => ({ ...prev, ...res.data }));
+    } catch (err) {
+      console.error('Lỗi tải cài đặt:', err);
+      setLoadError(err.message || 'Không tải được cấu hình. Đang hiển thị giá trị mặc định.');
+    } finally {
+      setLoading(false);
+    }
+  }
 
   useEffect(() => {
-    async function loadSettings() {
-      try {
-        const res = await api.get('/api/settings');
-        // Hợp nhất dữ liệu từ DB với default (phòng trường hợp DB trống)
-        setSettings(prev => ({ ...prev, ...res.data }));
-      } catch (err) {
-        console.error('Lỗi tải cài đặt:', err);
-      } finally {
-        setLoading(false);
-      }
-    }
     loadSettings();
   }, []);
 
@@ -39,25 +46,23 @@ export default function SettingsTab() {
   const handleSave = async (e) => {
     e.preventDefault();
     setSaving(true);
-    setMessage({ type: '', text: '' });
 
     try {
       await api.put('/api/settings', settings);
-      setMessage({ type: 'success', text: 'Đã lưu cấu hình thành công!' });
-      setTimeout(() => setMessage({ type: '', text: '' }), 3000);
+      toast('Đã lưu cấu hình thành công!');
     } catch (err) {
-      setMessage({ type: 'error', text: err.message || 'Lỗi lưu cấu hình.' });
+      toast(err.message || 'Lỗi lưu cấu hình.', 'error');
     } finally {
       setSaving(false);
     }
   };
 
   if (loading) {
-    return <div className="text-center py-20 text-white/30 text-xs uppercase">Đang tải cấu hình...</div>;
+    return <div className="w-full"><TableSkeleton rows={3} /></div>;
   }
 
   return (
-    <div className="tab-content-anim space-y-8 w-full">
+    <div className="tab-content-anim space-y-6 md:space-y-8 w-full pb-24 md:pb-0">
       <div className="flex items-center justify-between border-b border-white/5 pb-5">
         <div>
           <span className="text-[10px] tracking-[0.3em] text-white/30 uppercase font-semibold">
@@ -69,75 +74,79 @@ export default function SettingsTab() {
         </div>
       </div>
 
-      {message.text && (
-        <div className={`p-4 rounded-xl text-xs font-bold ${
-          message.type === 'success' ? 'bg-emerald-500/10 border border-emerald-500/20 text-emerald-400' : 'bg-red-500/10 border border-red-500/20 text-red-400'
-        }`}>
-          {message.text}
-        </div>
-      )}
+      <ErrorState message={loadError} onRetry={loadSettings} />
 
-      <form onSubmit={handleSave} className="space-y-6">
+      <form id="settings-form" onSubmit={handleSave} className="space-y-6">
         
         {/* THÔNG TIN CƠ BẢN */}
-        <div className="bg-zinc-900/20 border border-white/5 p-6 rounded-2xl space-y-4">
+        <div className="bg-zinc-900/20 border border-white/5 p-4 md:p-6 rounded-2xl space-y-4">
           <h3 className="text-xs font-bold uppercase tracking-widest text-white border-b border-white/5 pb-2">Thông tin thương hiệu</h3>
           
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
               <label className="text-[10px] uppercase tracking-wider text-gray-400 font-bold">Tên công ty</label>
-              <input type="text" value={settings.companyName} onChange={e => handleChange('companyName', e.target.value)} className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-xs text-white focus:outline-none focus:border-white/30" />
+              <input type="text" value={settings.companyName} onChange={e => handleChange('companyName', e.target.value)} className="w-full bg-black/40 border border-white/10 rounded-xl px-4 min-h-11 py-2 text-base md:text-xs text-white focus:outline-none focus:border-white/30" />
             </div>
             <div className="space-y-2">
               <label className="text-[10px] uppercase tracking-wider text-gray-400 font-bold">Slogan</label>
-              <input type="text" value={settings.slogan} onChange={e => handleChange('slogan', e.target.value)} className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-xs text-white focus:outline-none focus:border-white/30" />
+              <input type="text" value={settings.slogan} onChange={e => handleChange('slogan', e.target.value)} className="w-full bg-black/40 border border-white/10 rounded-xl px-4 min-h-11 py-2 text-base md:text-xs text-white focus:outline-none focus:border-white/30" />
             </div>
           </div>
         </div>
 
         {/* LIÊN HỆ */}
-        <div className="bg-zinc-900/20 border border-white/5 p-6 rounded-2xl space-y-4">
+        <div className="bg-zinc-900/20 border border-white/5 p-4 md:p-6 rounded-2xl space-y-4">
           <h3 className="text-xs font-bold uppercase tracking-widest text-white border-b border-white/5 pb-2">Thông tin liên hệ</h3>
           
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
               <label className="text-[10px] uppercase tracking-wider text-gray-400 font-bold">Hotline / Số điện thoại</label>
-              <input type="text" value={settings.hotline} onChange={e => handleChange('hotline', e.target.value)} className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-xs text-white focus:outline-none focus:border-white/30 font-mono" />
+              <input type="text" value={settings.hotline} onChange={e => handleChange('hotline', e.target.value)} className="w-full bg-black/40 border border-white/10 rounded-xl px-4 min-h-11 py-2 text-base md:text-xs text-white focus:outline-none focus:border-white/30 font-mono" />
             </div>
             <div className="space-y-2">
               <label className="text-[10px] uppercase tracking-wider text-gray-400 font-bold">Email</label>
-              <input type="email" value={settings.email} onChange={e => handleChange('email', e.target.value)} className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-xs text-white focus:outline-none focus:border-white/30 font-mono" />
+              <input type="email" value={settings.email} onChange={e => handleChange('email', e.target.value)} className="w-full bg-black/40 border border-white/10 rounded-xl px-4 min-h-11 py-2 text-base md:text-xs text-white focus:outline-none focus:border-white/30 font-mono" />
             </div>
             <div className="space-y-2 md:col-span-2">
               <label className="text-[10px] uppercase tracking-wider text-gray-400 font-bold">Địa chỉ</label>
-              <input type="text" value={settings.address} onChange={e => handleChange('address', e.target.value)} className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-xs text-white focus:outline-none focus:border-white/30" />
+              <input type="text" value={settings.address} onChange={e => handleChange('address', e.target.value)} className="w-full bg-black/40 border border-white/10 rounded-xl px-4 min-h-11 py-2 text-base md:text-xs text-white focus:outline-none focus:border-white/30" />
             </div>
           </div>
         </div>
 
         {/* MẠNG XÃ HỘI */}
-        <div className="bg-zinc-900/20 border border-white/5 p-6 rounded-2xl space-y-4">
+        <div className="bg-zinc-900/20 border border-white/5 p-4 md:p-6 rounded-2xl space-y-4">
           <h3 className="text-xs font-bold uppercase tracking-widest text-white border-b border-white/5 pb-2">Mạng xã hội</h3>
           
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
               <label className="text-[10px] uppercase tracking-wider text-gray-400 font-bold">Link Zalo</label>
-              <input type="url" value={settings.zaloLink} onChange={e => handleChange('zaloLink', e.target.value)} className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-xs text-white focus:outline-none focus:border-white/30" />
+              <input type="url" value={settings.zaloLink} onChange={e => handleChange('zaloLink', e.target.value)} className="w-full bg-black/40 border border-white/10 rounded-xl px-4 min-h-11 py-2 text-base md:text-xs text-white focus:outline-none focus:border-white/30" />
             </div>
             <div className="space-y-2">
               <label className="text-[10px] uppercase tracking-wider text-gray-400 font-bold">Link Facebook</label>
-              <input type="url" value={settings.facebookLink} onChange={e => handleChange('facebookLink', e.target.value)} className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-xs text-white focus:outline-none focus:border-white/30" />
+              <input type="url" value={settings.facebookLink} onChange={e => handleChange('facebookLink', e.target.value)} className="w-full bg-black/40 border border-white/10 rounded-xl px-4 min-h-11 py-2 text-base md:text-xs text-white focus:outline-none focus:border-white/30" />
             </div>
           </div>
         </div>
 
-        <div className="flex justify-end pt-4 border-t border-white/5">
-          <button type="submit" disabled={saving} className="bg-white text-black px-8 py-3 rounded-xl text-xs font-bold uppercase tracking-widest hover:bg-neutral-200 transition-all disabled:opacity-50">
+        {/* Nút lưu: dính đáy màn hình trên điện thoại, nằm cuối form từ md */}
+        {createPortal(
+          <div className="md:hidden fixed inset-x-0 bottom-0 z-30 bg-black border-t border-white/10 p-3">
+            <button type="submit" form="settings-form" disabled={saving} className="w-full min-h-11 bg-amber-400 text-black rounded-xl text-xs font-bold uppercase tracking-widest disabled:opacity-50 cursor-pointer">
+              {saving ? 'Đang lưu...' : 'Lưu cấu hình'}
+            </button>
+          </div>,
+          document.body
+        )}
+        <div className="hidden md:flex justify-end pt-4 border-t border-white/5">
+          <button type="submit" disabled={saving} className="min-h-11 bg-white text-black px-8 rounded-xl text-xs font-bold uppercase tracking-widest hover:bg-neutral-200 transition-all disabled:opacity-50 cursor-pointer">
             {saving ? 'Đang lưu...' : 'Lưu cấu hình'}
           </button>
         </div>
 
       </form>
+      {toastNode}
     </div>
   );
 }

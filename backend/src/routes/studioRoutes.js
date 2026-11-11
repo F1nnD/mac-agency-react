@@ -5,6 +5,8 @@
 //   GET  /api/studio/renders     lịch sử diễn hoạ của tôi (phân trang)
 //   GET  /api/studio/renders/:id mở lại một bản
 //   DELETE /api/studio/renders/:id xoá khỏi lịch sử
+//   POST   /api/studio/renders/:id/share  tạo liên kết chia sẻ công khai (chủ sở hữu)
+//   DELETE /api/studio/renders/:id/share  thu hồi liên kết chia sẻ
 // =============================================================
 const express = require('express');
 const mongoose = require('mongoose');
@@ -19,6 +21,7 @@ const Concept = require('../models/Concept');
 const Render = require('../models/Render');
 
 const ai = require('../services/aiService');
+const { persistRenderImage } = require('../services/storageService');
 const { buildEstimateForPlan, toPublicEstimate, upsertBoqDraft } = require('../services/estimateService');
 const { refreshEngagementSafe } = require('../services/engagementService');
 const { processLeadsInBackground } = require('../services/leadService');
@@ -67,7 +70,7 @@ router.post('/render', verifyToken, checkAIQuota, async (req, res) => {
 
     // 2. Ảnh phối cảnh
     const seed = crypto.randomInt(1, 2_000_000_000);
-    const imageUrl = ai.buildImageUrl({ prompt: analysis.imagePrompt, seed, tier: req.aiTier });
+    const imageUrl = ai.buildImageUrl({ prompt: analysis.imagePrompt, seed, tier: req.aiTier, refImageUrl: ai.pickReferenceImage(floorPlan) });
 
     // 3. Dự toán sơ bộ từ vật tư + giá thị trường trong database
     const estimate = await buildEstimateForPlan(floorPlan, concept);
@@ -82,6 +85,7 @@ router.post('/render', verifyToken, checkAIQuota, async (req, res) => {
       title: `${concept.style} · ${floorPlan.projectName}`.slice(0, 160),
       prompt: analysis.imagePrompt,
       imageUrl,
+      imageUrlOriginal: imageUrl,
       seed,
       analysis,
       analysisSource: source,
@@ -117,6 +121,9 @@ router.post('/render', verifyToken, checkAIQuota, async (req, res) => {
         quota: shapeQuota(quota)
       }
     });
+
+    // Sau khi đã trả lời khách: lưu bền ảnh sang kho ảnh riêng (nếu đã cấu hình), không chặn, không ném lỗi
+    setImmediate(() => { persistRenderImage(render._id).catch(() => {}); });
   } catch (error) {
     console.error('Lỗi AI Studio:', error);
     fail(res, 'Không thể diễn hoạ lúc này, vui lòng thử lại sau ít phút.', 500);
@@ -203,4 +210,39 @@ router.delete('/renders/:id', verifyToken, async (req, res) => {
   }
 });
 
+// Chia sẻ công khai: chỉ chủ sở hữu. Gọi lại khi đã chia sẻ thì trả về token cũ.
+router.post('/renders/:id/share', verifyToken, async (req, res) => {
+  try {
+    if (!mongoose.isValidObjectId(req.params.id)) return fail(res, 'Mã không hợp lệ.');
+    const render = await Render.findById(req.params.id).select('userId shareToken');
+    if (!render) return fail(res, 'Không tìm thấy bản diễn hoạ.', 404);
+    if (String(render.userId) !== String(req.user.userId)) return fail(res, 'Chỉ chủ sở hữu mới chia sẻ được bản này.', 403);
+
+    let token = render.shareToken;
+    if (!token) {
+      token = crypto.randomBytes(16).toString('hex');
+      await Render.updateOne({ _id: render._id }, { $set: { shareToken: token, sharedAt: new Date() } });
+    }
+    res.json({ success: true, data: { token, path: `/share/${token}` } });
+  } catch (error) {
+    console.error('Lỗi tạo liên kết chia sẻ:', error);
+    fail(res, 'Không tạo được liên kết chia sẻ.', 500);
+  }
+});
+
+router.delete('/renders/:id/share', verifyToken, async (req, res) => {
+  try {
+    if (!mongoose.isValidObjectId(req.params.id)) return fail(res, 'Mã không hợp lệ.');
+    const render = await Render.findById(req.params.id).select('userId');
+    if (!render) return fail(res, 'Không tìm thấy bản diễn hoạ.', 404);
+    if (String(render.userId) !== String(req.user.userId)) return fail(res, 'Chỉ chủ sở hữu mới thu hồi được.', 403);
+    await Render.updateOne({ _id: render._id }, { $unset: { shareToken: '' }, $set: { sharedAt: null } });
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Lỗi thu hồi liên kết chia sẻ:', error);
+    fail(res, 'Không thu hồi được liên kết.', 500);
+  }
+});
+
+router.persistRenderImage = persistRenderImage;
 module.exports = router;

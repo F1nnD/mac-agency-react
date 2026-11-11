@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { api, statsApi } from '../../utils/apiClient';
+import AdminTable, { TableSkeleton, ErrorState } from './AdminTable';
 
 export default function StatsTab() {
   const [overview, setOverview] = useState(null);
@@ -38,12 +39,46 @@ export default function StatsTab() {
   }, [days]);
 
   if (loading) {
-    return <div className="text-center py-20 text-white/30 text-xs uppercase">Đang tải thống kê...</div>;
+    return (
+      <div className="tab-content-anim space-y-6 w-full">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          {[0, 1, 2, 3].map(i => <div key={i} className="h-24 rounded-2xl bg-zinc-900/20 border border-white/5 motion-safe:animate-pulse" />)}
+        </div>
+        <TableSkeleton rows={3} />
+      </div>
+    );
   }
 
   if (error) {
-    return <div className="bg-red-500/10 border border-red-500/20 text-red-400 p-4 rounded-xl text-sm">{error}</div>;
+    return <ErrorState message={error} onRetry={fetchStats} />;
   }
+
+  const scoreBadge = (u) => (
+    <span className={`inline-block px-3 py-1 rounded font-bold font-mono ${
+      u.engagementScore >= 70 ? 'bg-red-500/20 text-red-400' :
+      u.engagementScore >= 40 ? 'bg-amber-400/20 text-amber-400' :
+      'bg-gray-500/20 text-gray-400'
+    }`}>
+      {u.engagementScore}/100
+    </span>
+  );
+
+  const topColumns = [
+    { key: 'rank', label: '#', align: 'center', hideOnMobile: true, render: (u, i) => <span className="font-mono text-gray-500">{i + 1}</span> },
+    {
+      key: 'user', label: 'Khách hàng', primary: true,
+      render: (u, i) => (
+        <div>
+          <p className="font-bold text-white"><span className="md:hidden text-gray-500 font-mono mr-2">#{i + 1}</span>{u.fullName || u.username}</p>
+          <p className="text-[10px] text-gray-500 font-mono mt-0.5 break-all">{u.email || 'Không có email'}</p>
+        </div>
+      )
+    },
+    { key: 'login', label: 'Login', align: 'center', render: u => <span className="font-mono text-gray-300">{u.loginCount || 0}</span> },
+    { key: 'render', label: 'Render', align: 'center', render: u => <span className="font-mono text-gray-300">{u.renderCount || 0}</span> },
+    { key: 'projects', label: 'Dự án', align: 'center', render: u => <span className="font-mono text-gray-300">{(u.floorPlanCount || 0) + (u.conceptCount || 0)}</span> },
+    { key: 'score', label: 'Điểm quan tâm', align: 'right', render: scoreBadge }
+  ];
 
   // Tìm max count để vẽ biểu đồ cột tỷ lệ thuận
   const maxLogin = Math.max(...activity.map(a => a.count), 1);
@@ -51,7 +86,7 @@ export default function StatsTab() {
   return (
     <div className="tab-content-anim space-y-8 w-full">
       {/* HEADER */}
-      <div className="flex items-center justify-between border-b border-white/5 pb-5">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/5 pb-5">
         <div>
           <span className="text-[10px] tracking-[0.3em] text-white/30 uppercase font-semibold">
             Business Intelligence
@@ -62,7 +97,7 @@ export default function StatsTab() {
         </div>
         <button
           onClick={fetchStats}
-          className="border border-white/10 bg-black/20 text-[10px] font-bold uppercase tracking-widest px-5 py-3 rounded-xl hover:border-white transition-all cursor-pointer"
+          className="border border-white/10 bg-black/20 text-[10px] font-bold uppercase tracking-widest px-5 min-h-11 rounded-xl hover:border-white transition-all cursor-pointer"
         >
           Làm mới
         </button>
@@ -149,7 +184,7 @@ export default function StatsTab() {
             <select
               value={days}
               onChange={e => setDays(Number(e.target.value))}
-              className="bg-black/40 border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none cursor-pointer"
+              className="bg-black/40 border border-white/10 rounded-xl px-4 min-h-11 text-xs text-white focus:outline-none cursor-pointer"
             >
               <option value={7}>7 ngày</option>
               <option value={30}>30 ngày</option>
@@ -160,16 +195,16 @@ export default function StatsTab() {
 
           <div className="space-y-3">
             {funnel.steps.map((s, i) => (
-              <div key={s.key} className="flex items-center gap-4">
-                <span className="w-36 shrink-0 text-[11px] text-gray-400">{s.label}</span>
-                <div className="flex-1 h-7 bg-black/40 rounded-lg overflow-hidden">
+              <div key={s.key} className="flex flex-wrap sm:flex-nowrap items-center gap-x-4 gap-y-1">
+                <span className="w-full sm:w-36 shrink-0 text-[11px] text-gray-400">{s.label}</span>
+                <div className="flex-1 min-w-0 h-7 bg-black/40 rounded-lg overflow-hidden">
                   <div
                     className="h-full bg-emerald-500/30 border-r-2 border-emerald-400 transition-all"
                     style={{ width: `${Math.max(s.pctOfFirst, s.count ? 2 : 0)}%` }}
                   />
                 </div>
                 <span className="w-12 text-right text-sm font-bold text-white font-mono">{s.count}</span>
-                <span className="w-24 text-right text-[10px] text-gray-500 font-mono">
+                <span className="w-24 shrink-0 text-right text-[10px] text-gray-500 font-mono">
                   {i === 0 ? '' : `${s.pctOfPrev}% bước trước`}
                 </span>
               </div>
@@ -206,51 +241,13 @@ export default function StatsTab() {
 
       {/* TOP USER QUAN TÂM NHẤT */}
       <div className="bg-zinc-900/20 border border-white/5 rounded-2xl overflow-hidden">
-        <div className="p-6 border-b border-white/5">
+        <div className="p-4 md:p-6 border-b border-white/5">
           <h3 className="text-xs font-bold uppercase tracking-widest text-white">Top Khách hàng quan tâm nhất</h3>
           <p className="text-[10px] text-gray-500 mt-1">Dựa trên điểm tương tác (Đăng nhập, Render, Tạo dự án, Gửi liên hệ)</p>
         </div>
-        <table className="w-full text-left border-collapse">
-          <thead>
-            <tr className="bg-black/40 border-b border-white/10 text-[10px] uppercase tracking-widest text-gray-400">
-              <th className="p-4 font-bold w-12 text-center">#</th>
-              <th className="p-4 font-bold">Khách hàng</th>
-              <th className="p-4 font-bold text-center">Login</th>
-              <th className="p-4 font-bold text-center">Render</th>
-              <th className="p-4 font-bold text-center">Dự án</th>
-              <th className="p-4 font-bold text-right pr-6">Điểm quan tâm</th>
-            </tr>
-          </thead>
-          <tbody className="text-xs text-white">
-            {topUsers.length === 0 ? (
-              <tr><td colSpan="6" className="p-6 text-center text-white/30 italic">Chưa có dữ liệu</td></tr>
-            ) : (
-              topUsers.map((u, i) => (
-                <tr key={u._id} className="border-b border-white/5 hover:bg-white/5 transition-all">
-                  <td className="p-4 text-center font-mono text-gray-500">{i + 1}</td>
-                  <td className="p-4">
-                    <p className="font-bold text-white">{u.fullName || u.username}</p>
-                    <p className="text-[10px] text-gray-500 font-mono mt-0.5">{u.email || 'Không có email'}</p>
-                  </td>
-                  <td className="p-4 text-center font-mono text-gray-300">{u.loginCount || 0}</td>
-                  <td className="p-4 text-center font-mono text-gray-300">{u.renderCount || 0}</td>
-                  <td className="p-4 text-center font-mono text-gray-300">
-                    {(u.floorPlanCount || 0) + (u.conceptCount || 0)}
-                  </td>
-                  <td className="p-4 text-right pr-6">
-                    <span className={`inline-block px-3 py-1 rounded font-bold font-mono ${
-                      u.engagementScore >= 70 ? 'bg-red-500/20 text-red-400' :
-                      u.engagementScore >= 40 ? 'bg-amber-400/20 text-amber-400' :
-                      'bg-gray-500/20 text-gray-400'
-                    }`}>
-                      {u.engagementScore}/100
-                    </span>
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
+        <div className="p-3 md:p-0">
+          <AdminTable columns={topColumns} rows={topUsers} emptyText="Chưa có dữ liệu" className="md:[&>div]:rounded-none md:[&>div]:border-0" />
+        </div>
       </div>
     </div>
   );

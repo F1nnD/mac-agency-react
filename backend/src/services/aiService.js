@@ -18,6 +18,7 @@ const {
   IMAGE_SIZE_BY_TIER,
   IMAGE_TAIL_BY_TIER
 } = require('./designKnowledge');
+const storage = require('./storageService');
 
 // Danh sách model theo cấu hình đang chạy của MAC; chỉnh bằng biến GEMINI_MODELS khi Google đổi tên model
 const DEFAULT_MODELS = ['gemini-3.8-flash', 'gemini-3.5-flash', 'gemini-2.5-flash'];
@@ -144,6 +145,26 @@ function dataUrlToPart(dataUrl) {
   return { inlineData: { mimeType: m[1] === 'image/jpg' ? 'image/jpeg' : m[1], data: m[2] } };
 }
 
+// Data URL hoặc URL https (host được phép) → part inlineData; tải về tối đa 10 giây, 5MB, phải là ảnh
+async function loadImagePart(src, options = {}) {
+  if (typeof src !== 'string') return null;
+  if (src.startsWith('data:')) return dataUrlToPart(src);
+  if (!/^https:\/\//i.test(src)) return null;
+  try {
+    const { buffer, mimeType } = await storage.fetchRemoteImage(src, { maxBytes: 5 * 1024 * 1024, timeoutMs: 10000, ...options });
+    if (!/^image\/(png|jpeg|webp)$/.test(mimeType)) return null;
+    return { inlineData: { mimeType, data: buffer.toString('base64') } };
+  } catch (error) {
+    console.warn('[AI] Không tải được ảnh hiện trạng:', error.message);
+    return null;
+  }
+}
+
+// Ảnh hiện trạng đầu tiên đã lưu dạng URL https (dùng cho chế độ ảnh-sang-ảnh)
+function pickReferenceImage(floorPlan) {
+  return (floorPlan?.images || []).find(src => typeof src === 'string' && /^https:\/\//i.test(src)) || '';
+}
+
 const clip = (value, max) => String(value ?? '').replace(/\s+/g, ' ').trim().slice(0, max);
 const asList = (value, maxItems, maxLen) =>
   (Array.isArray(value) ? value : [])
@@ -208,7 +229,7 @@ Các khoá bắt buộc:
 - "materialPalette": mảng 3-6 chuỗi, vật liệu và hoàn thiện đề xuất, bám theo chất liệu khách chọn.
 - "lightingStrategy": 1-2 câu về chiến lược ánh sáng.
 - "risks": mảng 0-3 chuỗi, các điểm cần khảo sát thêm (kết cấu, pháp lý, thoát nước...). Không khẳng định điều chưa biết.
-- "imagePrompt": MỘT đoạn tiếng Anh dưới 80 từ mô tả một ảnh phối cảnh kiến trúc chân thực, đúng style, màu, vật liệu và tỷ lệ mặt bằng. Không nhắc tên thương hiệu, người thật hay chữ viết trong ảnh.`;
+- "imagePrompt": MỘT đoạn tiếng Anh dưới 80 từ mô tả một ảnh phối cảnh kiến trúc chân thực, đúng style, màu, vật liệu và tỷ lệ mặt bằng. Nếu có ảnh hiện trạng, hãy đưa vào đặc điểm THẤY RÕ trong ảnh (hình dạng không gian, vị trí và số lượng cửa sổ/cửa đi, chiều cao trần, vật liệu hiện hữu như tường gạch, sàn bê tông, mái) để ảnh phối cảnh bám sát hiện trạng; chi tiết nào không thấy rõ thì bỏ qua, tuyệt đối không bịa. Không nhắc tên thương hiệu, người thật hay chữ viết trong ảnh.`;
 
 function ruleBasedAnalysis(floorPlan, concept, tier = 'free') {
   const site = describeSite(floorPlan, concept);
@@ -286,7 +307,7 @@ function buildFallbackImagePrompt(floorPlan, concept, tier = 'free') {
   ].filter(Boolean).join(', ');
 }
 
-function normalizeAnalysis(raw, fallback) {
+function normalizeAnalysis(raw, fallback, tier = 'free') {
   const base = fallback;
   if (!raw || typeof raw !== 'object') return base;
 
@@ -304,12 +325,17 @@ function normalizeAnalysis(raw, fallback) {
   };
 
   // Phần mở rộng theo tầng (Pro trở lên); khoá nào AI không trả thì bỏ qua
-  for (const key of EXTRA_ANALYSIS_LIST_KEYS) {
-    const list = asList(raw[key], 6, 300);
-    if (list.length) out[key] = list;
+  // Tầng free chỉ giữ phần cơ bản; khoá nội bộ chỉ dành cho nhân viên/quản trị
+  const canInternal = tier === 'staff' || tier === 'admin';
+  if (tier !== 'free' && tier !== 'guest') {
+    for (const key of EXTRA_ANALYSIS_LIST_KEYS) {
+      if (!canInternal && INTERNAL_ANALYSIS_KEYS.includes(key)) continue;
+      const list = asList(raw[key], 6, 300);
+      if (list.length) out[key] = list;
+    }
+    const circulation = clip(raw.circulation, 400);
+    if (circulation) out.circulation = circulation;
   }
-  const circulation = clip(raw.circulation, 400);
-  if (circulation) out.circulation = circulation;
   return out;
 }
 
@@ -319,6 +345,7 @@ function publicAnalysis(analysis, internal = false) {
   if (internal) return analysis;
   const out = { ...analysis };
   for (const key of INTERNAL_ANALYSIS_KEYS) delete out[key];
+  delete out.imagePrompt; // câu lệnh vẽ ảnh là tài sản nội bộ của MAC
   return out;
 }
 
@@ -327,10 +354,8 @@ async function analyzeSite({ tier = 'free', floorPlan, concept }) {
   if (!isConfigured()) return { analysis: fallback, source: 'rules', model: '' };
 
   const site = describeSite(floorPlan, concept);
-  const imageParts = (floorPlan.images || [])
-    .map(dataUrlToPart)
-    .filter(Boolean)
-    .slice(0, 3);
+  const imageParts = (await Promise.all((floorPlan.images || []).slice(0, 3).map(src => loadImagePart(src))))
+    .filter(Boolean);
 
   const guide = getStyleGuide(concept?.style);
   const text = [
@@ -352,7 +377,7 @@ async function analyzeSite({ tier = 'free', floorPlan, concept }) {
     });
     const parsed = parseJson(out);
     if (!parsed) throw new Error('AI không trả về JSON hợp lệ.');
-    return { analysis: normalizeAnalysis(parsed, fallback), source: 'gemini', model };
+    return { analysis: normalizeAnalysis(parsed, fallback, tier), source: 'gemini', model };
   } catch (error) {
     console.warn('[AI] Phân tích bằng Gemini thất bại, dùng bộ quy tắc dự phòng:', error.message);
     return { analysis: fallback, source: 'rules', model: '' };
@@ -362,13 +387,16 @@ async function analyzeSite({ tier = 'free', floorPlan, concept }) {
 // -------------------------------------------------------------
 // Ảnh phối cảnh (Pollinations — miễn phí)
 // -------------------------------------------------------------
-function buildImageUrl({ prompt, seed, tier = 'free' }) {
+// refImageUrl + IMAGE_REF_MODE=on: ảnh-sang-ảnh (model kontext, tham số image=<url>) theo tài liệu Pollinations.
+// CHƯA kiểm chứng với dịch vụ thật; mặc định tắt.
+function buildImageUrl({ prompt, seed, tier = 'free', refImageUrl = '' }) {
   const base = (process.env.IMAGE_API_BASE || 'https://image.pollinations.ai/prompt').replace(/\/+$/, '');
-  const model = process.env.IMAGE_MODEL || 'flux';
+  const useRef = process.env.IMAGE_REF_MODE === 'on' && /^https:\/\//i.test(refImageUrl || '');
+  const model = useRef ? 'kontext' : (process.env.IMAGE_MODEL || 'flux');
   const size = IMAGE_SIZE_BY_TIER[tier] || IMAGE_SIZE_BY_TIER.free;
   const width = Number(process.env.IMAGE_WIDTH) || size.width;
   const height = Number(process.env.IMAGE_HEIGHT) || size.height;
-  return `${base}/${encodeURIComponent(clip(prompt, 600))}?model=${encodeURIComponent(model)}&width=${width}&height=${height}&seed=${Number(seed) || 0}&nologo=true`;
+  return `${base}/${encodeURIComponent(clip(prompt, 600))}?model=${encodeURIComponent(model)}&width=${width}&height=${height}&seed=${Number(seed) || 0}&nologo=true${useRef ? `&image=${encodeURIComponent(refImageUrl)}` : ''}`;
 }
 
 module.exports = {
@@ -384,6 +412,8 @@ module.exports = {
   parseJson,
   toContents,
   dataUrlToPart,
+  loadImagePart,
+  pickReferenceImage,
   describeSite,
   modelsFor
 };

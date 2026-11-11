@@ -1,5 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { dataApi } from '../../utils/apiClient';
+import ImportDialog from './ImportDialog';
+import StalePricesBanner from './StalePricesBanner';
 
 export default function MarketPricesTab() {
   const [materials, setMaterials] = useState([]);
@@ -9,6 +11,8 @@ export default function MarketPricesTab() {
   const [form, setForm] = useState({ price: '', supplier: '', region: 'TP.HCM', source: 'bao-gia-ncc' });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [showImport, setShowImport] = useState(false);
+  const [staleKey, setStaleKey] = useState(0);
 
   // Tải danh sách vật tư để đưa vào dropdown
   useEffect(() => {
@@ -78,12 +82,15 @@ export default function MarketPricesTab() {
 
   return (
     <div className="tab-content-anim space-y-8 w-full">
-      <div className="flex items-center justify-between border-b border-white/5 pb-5">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-white/5 pb-5">
         <div>
           <span className="text-[10px] tracking-[0.3em] text-white/30 uppercase font-semibold">Market Price Management</span>
           <h1 className="text-2xl font-light text-white uppercase mt-1">Giá Thị Trường Vật Tư</h1>
         </div>
+        <button onClick={() => setShowImport(true)} className="min-h-[44px] border border-white/10 bg-black/20 text-[10px] font-bold uppercase tracking-widest px-5 rounded-xl hover:border-white transition-all">Nhập từ file</button>
       </div>
+
+      <StalePricesBanner refreshKey={staleKey} />
 
       <div className="flex flex-col md:flex-row gap-4 items-center">
         <label className="text-xs text-gray-400 font-bold uppercase tracking-widest whitespace-nowrap">Chọn vật tư:</label>
@@ -99,7 +106,7 @@ export default function MarketPricesTab() {
       </div>
 
       {currentMat && (
-        <div className="bg-zinc-900/20 border border-white/5 p-4 rounded-xl flex gap-6">
+        <div className="bg-zinc-900/20 border border-white/5 p-4 rounded-xl flex flex-wrap gap-x-6 gap-y-2">
           <div><span className="text-[10px] text-gray-500 uppercase">ĐVT:</span> <span className="text-white font-mono text-xs">{currentMat.unit}</span></div>
           <div><span className="text-[10px] text-gray-500 uppercase">Phân loại:</span> <span className="text-white text-xs">{currentMat.category}</span></div>
         </div>
@@ -132,8 +139,8 @@ export default function MarketPricesTab() {
       ) : prices.length === 0 ? (
         <div className="text-center py-20 border border-dashed border-white/10 rounded-2xl text-white/40 text-sm">Chưa có dữ liệu giá cho vật tư này</div>
       ) : (
-        <div className="bg-zinc-900/20 border border-white/5 rounded-2xl overflow-hidden">
-          <table className="w-full text-left border-collapse">
+        <div className="bg-zinc-900/20 border border-white/5 rounded-2xl overflow-x-auto">
+          <table className="w-full min-w-[480px] text-left border-collapse">
             <thead>
               <tr className="bg-black/40 border-b border-white/10 text-[10px] uppercase tracking-widest text-gray-400">
                 <th className="p-4 font-bold">Ngày báo giá</th>
@@ -156,6 +163,14 @@ export default function MarketPricesTab() {
             </tbody>
           </table>
         </div>
+      )}
+
+      {showImport && (
+        <ImportDialog
+          kind="market-prices"
+          onClose={() => setShowImport(false)}
+          onDone={() => { loadPrices(selectedMaterial); setStaleKey(k => k + 1); }}
+        />
       )}
     </div>
   );

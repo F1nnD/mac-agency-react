@@ -1,5 +1,11 @@
 import React, { useEffect, useRef, useState } from 'react';
+import ShareActions from './ShareActions';
+import gsap from 'gsap';
 import { studioApi } from '../utils/apiClient';
+import { prefersReducedMotion } from '../utils/motion';
+import AIProgress from './AIProgress';
+import BeforeAfter from './BeforeAfter';
+import CountUp from './CountUp';
 
 const BUDGET_TEXT = {
   'trong-ngan-sach': { label: 'Nằm trong ngân sách bạn nêu', cls: 'text-emerald-400 border-emerald-500/30 bg-emerald-500/10' },
@@ -10,10 +16,26 @@ const BUDGET_TEXT = {
 const CONFIDENCE_LABEL = { cao: 'Độ tin cậy cao', 'trung-binh': 'Độ tin cậy trung bình', thap: 'Độ tin cậy thấp' };
 
 const formatVnd = (n) => `${Math.round(Number(n) || 0).toLocaleString('vi-VN')} đ`;
-const formatBillion = (n) => {
+// Tách số tiền thành giá trị + đơn vị (tỷ / triệu) để chạy số
+const splitMoney = (n) => {
   const v = Number(n) || 0;
-  return v >= 1_000_000_000 ? `${(v / 1_000_000_000).toFixed(2).replace(/\.?0+$/, '')} tỷ` : `${Math.round(v / 1_000_000)} triệu`;
+  if (v >= 1_000_000_000) {
+    const value = Math.round(v / 10_000_000) / 100;
+    return { value, unit: 'tỷ', dec: (String(value).split('.')[1] || '').length };
+  }
+  return { value: Math.round(v / 1_000_000), unit: 'triệu', dec: 0 };
 };
+
+function Money({ n }) {
+  const { value, unit, dec } = splitMoney(n);
+  return (
+    <CountUp
+      value={value}
+      suffix={` ${unit}`}
+      format={(x) => x.toLocaleString('vi-VN', { minimumFractionDigits: dec, maximumFractionDigits: dec })}
+    />
+  );
+}
 
 function Section({ title, children }) {
   return (
@@ -48,7 +70,7 @@ export function EstimateCard({ estimate }) {
         <>
           <div>
             <p className="text-2xl md:text-3xl font-bold text-white font-mono">
-              {formatBillion(estimate.rangeLow)} – {formatBillion(estimate.rangeHigh)}
+              <Money n={estimate.rangeLow} /> – <Money n={estimate.rangeHigh} />
             </p>
             <p className="text-[11px] text-neutral-500 mt-1">
               Khoảng {formatVnd(estimate.perM2?.low)} – {formatVnd(estimate.perM2?.high)} / m² · {CONFIDENCE_LABEL[estimate.confidence] || ''}
@@ -139,6 +161,7 @@ export default function RenderResult({ floorPlan, concept, onDone }) {
   const [imgState, setImgState] = useState('loading'); // loading | ok | failed
   const [imgKey, setImgKey] = useState(0);
   const started = useRef(false);
+  const resultRef = useRef(null);
 
   const run = async () => {
     setState('loading');
@@ -147,12 +170,19 @@ export default function RenderResult({ floorPlan, concept, onDone }) {
     try {
       const res = await studioApi.render({ floorPlanId: floorPlan._id, conceptId: concept._id });
       setResult(res.data);
-      setState('done');
+      setState('finishing'); // AIProgress hoàn tất thanh rồi gọi onFinished -> 'done'
     } catch (err) {
       setError(err.message || 'Không thể diễn hoạ lúc này.');
       setState('error');
     }
   };
+
+  // Lưới an toàn: nếu hiệu ứng hoàn tất bị treo (tab ẩn...), vẫn chuyển sang kết quả sau 2,5 giây
+  useEffect(() => {
+    if (state !== 'finishing') return undefined;
+    const t = setTimeout(() => setState('done'), 2500);
+    return () => clearTimeout(t);
+  }, [state]);
 
   // Chỉ tự chạy một lần (tránh trừ lượt hai lần khi React StrictMode chạy lại hiệu ứng)
   useEffect(() => {
@@ -162,17 +192,21 @@ export default function RenderResult({ floorPlan, concept, onDone }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  if (state === 'loading') {
+  // Kết quả hiện nhẹ nhàng sau màn chờ
+  useEffect(() => {
+    if (state !== 'done' || !resultRef.current || prefersReducedMotion()) return undefined;
+    const tw = gsap.fromTo(resultRef.current, { opacity: 0, y: 16 }, { opacity: 1, y: 0, duration: 0.7, ease: 'power3.out', clearProps: 'opacity,transform' });
+    return () => tw.kill();
+  }, [state]);
+
+  if (state === 'loading' || state === 'finishing') {
     return (
-      <div className="text-center py-16 space-y-5">
-        <div className="w-14 h-14 mx-auto rounded-full border-2 border-white/10 border-t-amber-400 animate-spin" />
-        <div className="space-y-2">
-          <h3 className="text-lg font-bold text-white uppercase">AI đang diễn hoạ không gian</h3>
-          <p className="text-xs text-neutral-500 max-w-sm mx-auto">
-            Đang phân tích mặt bằng {floorPlan.totalArea} m², phong cách {concept.style} và dựng phối cảnh. Việc này có thể mất vài chục giây.
-          </p>
-        </div>
-      </div>
+      <AIProgress
+        done={state === 'finishing'}
+        area={floorPlan.totalArea}
+        style={concept.style}
+        onFinished={() => setState('done')}
+      />
     );
   }
 
@@ -201,10 +235,12 @@ export default function RenderResult({ floorPlan, concept, onDone }) {
     );
   }
 
-  const { analysis, estimate, quota, imageUrl, analysisSource } = result;
+  const { analysis, estimate, quota, imageUrl, analysisSource, renderId } = result;
+  const afterSrc = `${imageUrl}${imgKey ? `&retry=${imgKey}` : ''}`;
+  const beforeSrc = Array.isArray(floorPlan.images) && typeof floorPlan.images[0] === 'string' && floorPlan.images[0] ? floorPlan.images[0] : '';
 
   return (
-    <div className="space-y-8 text-left">
+    <div ref={resultRef} className="space-y-8 text-left">
       <div className="space-y-1">
         <span className="text-[10px] tracking-[0.3em] text-emerald-400 font-mono uppercase block">Kết quả diễn hoạ</span>
         <h3 className="text-lg font-bold text-white uppercase">{floorPlan.projectName}</h3>
@@ -235,14 +271,30 @@ export default function RenderResult({ floorPlan, concept, onDone }) {
             )}
           </div>
         )}
-        <img
-          key={imgKey}
-          src={`${imageUrl}${imgKey ? `&retry=${imgKey}` : ''}`}
-          alt={`Phối cảnh ${concept.style}`}
-          onLoad={() => setImgState('ok')}
-          onError={() => setImgState('failed')}
-          className={`w-full h-full object-cover transition-opacity duration-700 ${imgState === 'ok' ? 'opacity-100' : 'opacity-0'}`}
-        />
+        {beforeSrc ? (
+          <div className={`absolute inset-0 transition-opacity duration-700 ${imgState === 'ok' ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
+            <BeforeAfter
+              key={imgKey}
+              className="absolute inset-0"
+              beforeSrc={beforeSrc}
+              afterSrc={afterSrc}
+              beforeAlt={`Hiện trạng ${floorPlan.projectName || ''}`.trim()}
+              afterAlt={`Phối cảnh ${concept.style}`}
+              onAfterLoad={() => setImgState('ok')}
+              onAfterError={() => setImgState('failed')}
+            />
+          </div>
+        ) : (
+          <img
+            key={imgKey}
+            src={afterSrc}
+            alt={`Phối cảnh ${concept.style}`}
+            decoding="async"
+            onLoad={() => setImgState('ok')}
+            onError={() => setImgState('failed')}
+            className={`w-full h-full object-cover transition-[opacity,filter,transform] duration-[900ms] ease-out ${imgState === 'ok' ? 'opacity-100 blur-0 scale-100' : 'opacity-0 blur-lg scale-105'}`}
+          />
+        )}
       </div>
       <p className="text-[10px] text-neutral-600 -mt-4">
         Ảnh do AI tạo để gợi ý không khí và vật liệu, không phải bản vẽ thi công.
@@ -256,6 +308,8 @@ export default function RenderResult({ floorPlan, concept, onDone }) {
       <EstimateCard estimate={estimate} />
 
       <AnalysisSections analysis={analysis} />
+
+      <ShareActions renderId={renderId} title={analysis?.summary} />
 
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 pt-4 border-t border-white/5">
         <p className="text-[10px] text-neutral-600">

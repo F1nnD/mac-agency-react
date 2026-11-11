@@ -76,18 +76,6 @@ export function isAdmin() { return getUserRole() === 'admin'; }
 export function isStaff() { return getUserRole() === 'staff'; }
 export function isCustomer() { return ['customer_pro', 'customer_free'].includes(getUserRole()); }
 
-export async function registerUser({ username, password, fullName, email }) {
-  const res = await fetch(`${API_BASE_URL}/api/auth/register`, {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ username, password, fullName, email })
-  });
-  const data = await res.json().catch(() => null);
-  if (!res.ok || !data?.success) throw new Error(data?.message || `Lỗi ${res.status}`);
-  localStorage.setItem('mac_token', data.token);
-  localStorage.setItem('mac_user', JSON.stringify(data.user));
-  return data;
-}
-
 export async function loginUser({ username, password }) {
   const res = await fetch(`${API_BASE_URL}/api/auth/login`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },

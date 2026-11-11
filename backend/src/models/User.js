@@ -65,6 +65,31 @@ const UserSchema = new mongoose.Schema({
   proExpiresAt: {
     type: Date,
     default: null
+  },
+  // Đồng ý thu thập và xử lý dữ liệu (ghi nhận lúc đăng ký)
+  consentAt: {
+    type: Date,
+    default: null
+  },
+  consentVersion: {
+    type: String,
+    default: ''
+  },
+  // Đặt lại mật khẩu: chỉ lưu băm sha256 của token, không lưu token gốc
+  resetTokenHash: {
+    type: String,
+    default: '',
+    select: false
+  },
+  resetTokenExpires: {
+    type: Date,
+    default: null,
+    select: false
+  },
+  // Mốc đổi mật khẩu: token đăng nhập cấp trước mốc này bị từ chối
+  passwordChangedAt: {
+    type: Date,
+    default: null
   }
 }, { timestamps: true });
 

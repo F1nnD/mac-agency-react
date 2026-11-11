@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import gsap from 'gsap';
 import { api, getCurrentUser, logout } from '../utils/apiClient';
@@ -13,8 +13,36 @@ import BOQTab from '../components/admin/BOQTab';
 import UsersTab from '../components/admin/UsersTab';
 import AdminAI from '../components/admin/AdminAI';
 
+// ===== DANH SÁCH TAB =====
+// Thêm tab mới chỉ cần thêm MỘT dòng vào mảng này:
+//   { id: 'ten-tab', label: 'Nhãn menu', roles: ['admin', 'staff'], component: TenTab }
+// - roles: vai trò được xem tab (bỏ trống = admin và staff đều xem được).
+// - component: component độc lập, không nhận props.
+// Riêng 3 tab cũ dùng chung state của Dashboard (projects/drafts/packages) không có component,
+// được vẽ trực tiếp bên dưới theo id.
+const ALL_ROLES = ['admin', 'staff'];
+const TABS = [
+  { id: 'admin-ai-tab', label: 'Trợ Lý AI Nội Bộ', roles: ALL_ROLES, component: AdminAI },
+  { id: 'projects-tab', label: 'Quản lý dự án', roles: ALL_ROLES },
+  { id: 'leads-tab', label: 'Quản lý Leads', roles: ALL_ROLES, component: LeadsTab },
+  { id: 'stats-tab', label: 'Thống kê User', roles: ALL_ROLES, component: StatsTab },
+  { id: 'materials-tab', label: 'Kho Vật Tư', roles: ALL_ROLES, component: MaterialsTab },
+  { id: 'market-prices-tab', label: 'Giá Thị Trường', roles: ALL_ROLES, component: MarketPricesTab },
+  { id: 'boq-tab', label: 'Dự Toán BOQ', roles: ALL_ROLES, component: BOQTab },
+  { id: 'users-tab', label: 'Quản lý Người dùng', roles: ['admin'], component: UsersTab },
+  { id: 'settings-tab', label: 'Cài Đặt Chung', roles: ALL_ROLES, component: SettingsTab },
+  { id: 'floorplans-tab', label: 'Mặt Bằng Khách', roles: ALL_ROLES, component: FloorPlansTab },
+  { id: 'concepts-tab', label: 'Concept Khách', roles: ALL_ROLES, component: ConceptsTab },
+  { id: 'drafts-tab', label: 'Quản lý Draft Layout', roles: ALL_ROLES },
+  { id: 'packages-tab', label: 'Sửa bảng giá Web', roles: ALL_ROLES }
+];
+const canView = (tab, user) => (tab.roles || ALL_ROLES).includes(user?.role);
+
 export default function Dashboard() {
   const navigate = useNavigate();
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const menuBtnRef = useRef(null);
+  const closeBtnRef = useRef(null);
 
   const [activeTab, setActiveTab] = useState('projects-tab');
   const [globalProjects, setGlobalProjects] = useState({});
@@ -129,8 +157,31 @@ export default function Dashboard() {
     }
     loadInitialConfig();
 
-    gsap.fromTo('.admin-panel-reveal', { opacity: 0, y: 15 }, { duration: 0.6, opacity: 1, y: 0, ease: 'power2.out' });
+    // Bỏ transform sau khi chạy xong để không nhốt phần tử `fixed` bên trong; tắt hiệu ứng nếu người dùng chọn giảm chuyển động
+    const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (!reduce) {
+      gsap.fromTo('.admin-panel-reveal', { opacity: 0, y: 15 }, { duration: 0.6, opacity: 1, y: 0, ease: 'power2.out', clearProps: 'transform,opacity' });
+    }
   }, [navigate]);
+
+  // Ngăn kéo: khoá cuộn nền, đóng bằng ESC, đóng khi phóng to quá breakpoint md, trả focus về nút menu
+  useEffect(() => {
+    if (!drawerOpen) return undefined;
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    const onKey = (e) => { if (e.key === 'Escape') setDrawerOpen(false); };
+    const onResize = () => { if (window.innerWidth >= 768) setDrawerOpen(false); };
+    window.addEventListener('keydown', onKey);
+    window.addEventListener('resize', onResize);
+    if (closeBtnRef.current) closeBtnRef.current.focus();
+    const menuBtn = menuBtnRef.current;
+    return () => {
+      document.body.style.overflow = prevOverflow;
+      window.removeEventListener('keydown', onKey);
+      window.removeEventListener('resize', onResize);
+      if (menuBtn && window.innerWidth < 768) menuBtn.focus();
+    };
+  }, [drawerOpen]);
 
   // ===== PROJECT HANDLERS =====
   const fillProjectToForm = (proj) => {
@@ -310,122 +361,180 @@ export default function Dashboard() {
   };
 
   // ===== RENDER =====
-  return (
-    <div className="w-full min-h-screen bg-[#050505] text-gray-300 antialiased font-sans flex flex-col md:flex-row admin-panel-reveal">
-      <style>{`
-        .tab-content-anim { animation: fadeIn 0.4s ease-out forwards; }
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
-      `}</style>
+  const visibleTabs = TABS.filter(t => canView(t, currentUser));
+  const current = visibleTabs.find(t => t.id === activeTab) || null;
+  const CurrentComponent = current?.component || null;
 
-      <aside className="w-full md:w-64 bg-black border-b md:border-b-0 md:border-r border-white/5 flex flex-col justify-between p-6 select-none shrink-0 text-left">
-        <div className="space-y-8">
-          <div className="flex flex-col border-b border-white/5 pb-5">
-            <span className="text-2xl font-bold tracking-widest text-white">MAC</span>
-            <span className="text-[9px] tracking-[0.2em] text-white/40 uppercase mt-1">Core Web Admin</span>
-          </div>
+  const selectTab = (id) => {
+    setActiveTab(id);
+    setDrawerOpen(false);
+    const mainEl = document.getElementById('admin-main');
+    if (mainEl) mainEl.scrollTop = 0;
+    window.scrollTo(0, 0);
+  };
 
-          <nav className="space-y-1.5">
-            <div className="text-[9px] tracking-widest uppercase text-white/20 font-bold px-4 pb-1">Hệ thống danh mục</div>
-            
-            <button onClick={() => setActiveTab('admin-ai-tab')} className={`w-full text-left px-4 py-3 rounded-xl text-xs font-semibold tracking-widest uppercase transition-all cursor-pointer outline-none border ${activeTab === 'admin-ai-tab' ? 'text-amber-400 bg-amber-400/10 border-amber-400/30' : 'text-gray-400 hover:text-amber-400 hover:bg-amber-400/5 border-transparent'}`}>
-              Trợ Lý AI Nội Bộ
-            </button>
-            <button onClick={() => setActiveTab('projects-tab')} className={`w-full text-left px-4 py-3 rounded-xl text-xs font-semibold tracking-widest uppercase transition-all cursor-pointer outline-none border ${activeTab === 'projects-tab' ? 'text-white bg-white/5 border-white/10' : 'text-gray-400 hover:text-white hover:bg-white/5 border-transparent'}`}>
-              Quản lý dự án
-            </button>
-            <button onClick={() => setActiveTab('leads-tab')} className={`w-full text-left px-4 py-3 rounded-xl text-xs font-semibold tracking-widest uppercase transition-all cursor-pointer outline-none border ${activeTab === 'leads-tab' ? 'text-white bg-white/5 border-white/10' : 'text-gray-400 hover:text-white hover:bg-white/5 border-transparent'}`}>
-              Quản lý Leads
-            </button>
-            <button onClick={() => setActiveTab('stats-tab')} className={`w-full text-left px-4 py-3 rounded-xl text-xs font-semibold tracking-widest uppercase transition-all cursor-pointer outline-none border ${activeTab === 'stats-tab' ? 'text-white bg-white/5 border-white/10' : 'text-gray-400 hover:text-white hover:bg-white/5 border-transparent'}`}>
-              Thống kê User
-            </button>
-            <button onClick={() => setActiveTab('materials-tab')} className={`w-full text-left px-4 py-3 rounded-xl text-xs font-semibold tracking-widest uppercase transition-all cursor-pointer outline-none border ${activeTab === 'materials-tab' ? 'text-white bg-white/5 border-white/10' : 'text-gray-400 hover:text-white hover:bg-white/5 border-transparent'}`}>
-              Kho Vật Tư
-            </button>
-            <button onClick={() => setActiveTab('market-prices-tab')} className={`w-full text-left px-4 py-3 rounded-xl text-xs font-semibold tracking-widest uppercase transition-all cursor-pointer outline-none border ${activeTab === 'market-prices-tab' ? 'text-white bg-white/5 border-white/10' : 'text-gray-400 hover:text-white hover:bg-white/5 border-transparent'}`}>
-              Giá Thị Trường
-            </button>
-            <button onClick={() => setActiveTab('boq-tab')} className={`w-full text-left px-4 py-3 rounded-xl text-xs font-semibold tracking-widest uppercase transition-all cursor-pointer outline-none border ${activeTab === 'boq-tab' ? 'text-white bg-white/5 border-white/10' : 'text-gray-400 hover:text-white hover:bg-white/5 border-transparent'}`}>
-              Dự Toán BOQ
-            </button>
-            {currentUser?.role === 'admin' && (
-  <button onClick={() => setActiveTab('users-tab')} className={`w-full text-left px-4 py-3 rounded-xl text-xs font-semibold tracking-widest uppercase transition-all cursor-pointer outline-none border ${activeTab === 'users-tab' ? 'text-white bg-white/5 border-white/10' : 'text-gray-400 hover:text-white hover:bg-white/5 border-transparent'}`}>
-              Quản lý Người dùng
-            </button>
-            )}
-            <button onClick={() => setActiveTab('settings-tab')} className={`w-full text-left px-4 py-3 rounded-xl text-xs font-semibold tracking-widest uppercase transition-all cursor-pointer outline-none border ${activeTab === 'settings-tab' ? 'text-white bg-white/5 border-white/10' : 'text-gray-400 hover:text-white hover:bg-white/5 border-transparent'}`}>
-              Cài Đặt Chung
-            </button>
-            <button onClick={() => setActiveTab('floorplans-tab')} className={`w-full text-left px-4 py-3 rounded-xl text-xs font-semibold tracking-widest uppercase transition-all cursor-pointer outline-none border ${activeTab === 'floorplans-tab' ? 'text-white bg-white/5 border-white/10' : 'text-gray-400 hover:text-white hover:bg-white/5 border-transparent'}`}>
-              Mặt Bằng Khách
-            </button>
-            <button onClick={() => setActiveTab('concepts-tab')} className={`w-full text-left px-4 py-3 rounded-xl text-xs font-semibold tracking-widest uppercase transition-all cursor-pointer outline-none border ${activeTab === 'concepts-tab' ? 'text-white bg-white/5 border-white/10' : 'text-gray-400 hover:text-white hover:bg-white/5 border-transparent'}`}>
-              Concept Khách
-            </button>
-            <button onClick={() => setActiveTab('drafts-tab')} className={`w-full text-left px-4 py-3 rounded-xl text-xs font-semibold tracking-widest uppercase transition-all cursor-pointer outline-none border ${activeTab === 'drafts-tab' ? 'text-white bg-white/5 border-white/10' : 'text-gray-400 hover:text-white hover:bg-white/5 border-transparent'}`}>
-              Quản lý Draft Layout
-            </button>
-            <button onClick={() => setActiveTab('packages-tab')} className={`w-full text-left px-4 py-3 rounded-xl text-xs font-semibold tracking-widest uppercase transition-all cursor-pointer outline-none border ${activeTab === 'packages-tab' ? 'text-white bg-white/5 border-white/10' : 'text-gray-400 hover:text-white hover:bg-white/5 border-transparent'}`}>
-              Sửa bảng giá Web
-            </button>
-          </nav>
-        </div>
-
-        <div className="border-t border-white/5 pt-4 space-y-2">
-          <div className="px-3 py-2 mb-2 bg-white/5 rounded-lg">
-            <p className="text-[9px] uppercase tracking-widest text-white/30 font-bold">Đang đăng nhập</p>
-            <p className="text-xs text-white font-mono truncate">{currentUser?.username || 'Unknown'}</p>
-            <p className="text-[9px] text-emerald-400 uppercase tracking-wider">{currentUser?.role || ''}</p>
-          </div>
-
-          <button
-            onClick={() => { sessionStorage.removeItem('isFromAdmin'); navigate('/'); }}
-            className="w-full text-center text-[10px] tracking-widest uppercase text-white/30 hover:text-amber-400 transition-colors py-2 bg-transparent border border-dashed border-white/10 rounded-xl cursor-pointer font-semibold outline-none"
-          >
-            Quay lại cổng phân luồng
-          </button>
-
-          <button
-  onClick={() => {
-    // Lưu cờ báo hiệu Admin đang đi xem Web
+  const goViewWeb = () => {
+    // Lưu cờ báo hiệu Admin đang đi xem Web (Header dùng cờ này để hiện nút quay lại)
     sessionStorage.setItem('isAdminViewingWeb', 'true');
     // Dùng navigate của React Router để chuyển trang không bị load lại
     navigate('/home');
-  }}
-  className="w-full text-center text-xs tracking-widest uppercase text-white/50 hover:text-white transition-colors py-2.5 bg-zinc-900 border border-white/5 rounded-xl cursor-pointer font-semibold outline-none"
->
-  Thoát ra xem Web
-</button>
+  };
 
+  const navBtn = (t) => (
+    <button
+      key={t.id}
+      type="button"
+      onClick={() => selectTab(t.id)}
+      aria-current={activeTab === t.id ? 'page' : undefined}
+      className={`w-full text-left px-4 min-h-11 rounded-xl text-xs font-semibold tracking-widest uppercase transition-all cursor-pointer outline-none border ${activeTab === t.id ? 'text-amber-400 bg-amber-400/10 border-amber-400/30' : 'text-gray-400 hover:text-amber-400 hover:bg-amber-400/5 border-transparent'}`}
+    >
+      {t.label}
+    </button>
+  );
+
+  const brand = (
+    <div className="flex flex-col border-b border-white/5 pb-5">
+      <span className="text-2xl font-bold tracking-widest text-white">MAC</span>
+      <span className="text-[9px] tracking-[0.2em] text-white/40 uppercase mt-1">Core Web Admin</span>
+    </div>
+  );
+
+  const navList = (
+    <nav className="space-y-1.5" aria-label="Danh mục quản trị">
+      <div className="text-[9px] tracking-widest uppercase text-white/20 font-bold px-4 pb-1">Hệ thống danh mục</div>
+      {visibleTabs.map(navBtn)}
+    </nav>
+  );
+
+  const userBlock = (
+    <div className="border-t border-white/5 pt-4 space-y-2">
+      <div className="px-3 py-2 mb-2 bg-white/5 rounded-lg">
+        <p className="text-[9px] uppercase tracking-widest text-white/30 font-bold">Đang đăng nhập</p>
+        <p className="text-xs text-white font-mono truncate">{currentUser?.username || 'Unknown'}</p>
+        <p className="text-[9px] text-emerald-400 uppercase tracking-wider">{currentUser?.role || ''}</p>
+      </div>
+
+      <button
+        type="button"
+        onClick={() => { sessionStorage.removeItem('isFromAdmin'); navigate('/'); }}
+        className="w-full min-h-11 text-center text-[10px] tracking-widest uppercase text-white/40 hover:text-amber-400 transition-colors bg-transparent border border-dashed border-white/10 rounded-xl cursor-pointer font-semibold outline-none"
+      >
+        Quay lại cổng phân luồng
+      </button>
+
+      <button
+        type="button"
+        onClick={goViewWeb}
+        className="w-full min-h-11 text-center text-xs tracking-widest uppercase text-white/60 hover:text-white transition-colors bg-zinc-900 border border-white/10 rounded-xl cursor-pointer font-semibold outline-none"
+      >
+        Xem website
+      </button>
+
+      <button
+        type="button"
+        onClick={handleLogout}
+        className="w-full min-h-11 text-center text-xs tracking-widest uppercase text-red-400 hover:text-white hover:bg-red-900/50 transition-colors bg-red-950/20 border border-red-900/30 rounded-xl cursor-pointer font-semibold outline-none"
+      >
+        Đăng xuất
+      </button>
+    </div>
+  );
+
+  // Ngăn kéo điện thoại: render NGOÀI khung có transform/blur (admin-panel-reveal) để `fixed` luôn phủ toàn màn hình
+  const drawer = (
+    <div
+      className={`md:hidden fixed inset-0 z-50 transition-[visibility] duration-200 ${drawerOpen ? 'visible' : 'invisible'}`}
+      aria-hidden={!drawerOpen}
+    >
+      <button
+        type="button"
+        tabIndex={drawerOpen ? 0 : -1}
+        aria-label="Đóng menu"
+        onClick={() => setDrawerOpen(false)}
+        className={`absolute inset-0 w-full h-full bg-black/80 cursor-default transition-opacity duration-200 motion-reduce:transition-none ${drawerOpen ? 'opacity-100' : 'opacity-0'}`}
+      />
+      <aside
+        id="admin-drawer"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Menu quản trị"
+        className={`absolute inset-y-0 left-0 w-[85%] max-w-xs h-dvh bg-black border-r border-white/10 flex flex-col text-left transition-transform duration-200 motion-reduce:transition-none ${drawerOpen ? 'translate-x-0' : '-translate-x-full'}`}
+      >
+        <div className="flex items-center justify-between px-5 pt-5 pb-3 shrink-0">
+          <div className="flex flex-col">
+            <span className="text-xl font-bold tracking-widest text-white">MAC</span>
+            <span className="text-[9px] tracking-[0.2em] text-white/40 uppercase">Core Web Admin</span>
+          </div>
           <button
-            onClick={handleLogout}
-            className="w-full text-center text-xs tracking-widest uppercase text-red-400 hover:text-white hover:bg-red-900/50 transition-colors py-2.5 bg-red-950/20 border border-red-900/30 rounded-xl cursor-pointer font-semibold outline-none"
+            ref={closeBtnRef}
+            type="button"
+            onClick={() => setDrawerOpen(false)}
+            aria-label="Đóng menu"
+            className="w-11 h-11 flex items-center justify-center rounded-xl border border-white/10 text-white/70 text-xl cursor-pointer"
           >
-            Đăng xuất
+            ×
           </button>
         </div>
+        <div className="flex-1 overflow-y-auto overscroll-contain px-4 py-2">{navList}</div>
+        <div className="shrink-0 px-4 pb-4">{userBlock}</div>
       </aside>
+    </div>
+  );
 
-      <main className="flex-1 bg-[#0b0b0b] p-8 md:p-12 overflow-y-auto h-screen text-left">
-        {activeTab === 'admin-ai-tab' && <AdminAI />}
-        {activeTab === 'leads-tab' && <LeadsTab />}
-        {activeTab === 'floorplans-tab' && <FloorPlansTab />}
-        {activeTab === 'concepts-tab' && <ConceptsTab />}
-        {activeTab === 'materials-tab' && <MaterialsTab />}
-        {activeTab === 'market-prices-tab' && <MarketPricesTab />}
-        {activeTab === 'stats-tab' && <StatsTab />}
-        {activeTab === 'settings-tab' && <SettingsTab />}
-        {activeTab === 'boq-tab' && <BOQTab />}
-        {activeTab === 'users-tab' && currentUser?.role === 'admin' && <UsersTab />}
+  return (
+    <>
+      <style>{`
+        .tab-content-anim { animation: fadeIn 0.4s ease-out; }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        @media (prefers-reduced-motion: reduce) { .tab-content-anim { animation: none; } }
+      `}</style>
+
+      <div className="w-full min-h-dvh bg-[#050505] text-gray-300 antialiased font-sans flex flex-col md:flex-row admin-panel-reveal">
+        {/* THANH TRÊN (điện thoại) */}
+        <header className="md:hidden sticky top-0 z-40 h-14 bg-black border-b border-white/10 flex items-center gap-3 px-3 select-none">
+          <button
+            ref={menuBtnRef}
+            type="button"
+            onClick={() => setDrawerOpen(true)}
+            aria-label="Mở menu"
+            aria-expanded={drawerOpen}
+            aria-controls="admin-drawer"
+            className="w-11 h-11 flex flex-col items-center justify-center gap-1.5 rounded-xl border border-white/10 cursor-pointer shrink-0"
+          >
+            <span className="block w-5 h-0.5 bg-white" />
+            <span className="block w-5 h-0.5 bg-white" />
+            <span className="block w-5 h-0.5 bg-white" />
+          </button>
+          <div className="min-w-0 flex-1 text-left">
+            <p className="text-[9px] tracking-[0.25em] text-amber-400 uppercase font-bold leading-none">MAC Admin</p>
+            <p className="text-xs text-white font-semibold uppercase tracking-widest truncate mt-1">{current?.label || 'Quản trị'}</p>
+          </div>
+          <div className="text-right shrink-0 max-w-[30%]">
+            <p className="text-[10px] text-white font-mono truncate">{currentUser?.username || ''}</p>
+            <p className="text-[9px] text-emerald-400 uppercase tracking-wider">{currentUser?.role || ''}</p>
+          </div>
+        </header>
+
+        {/* THANH BÊN (từ md) */}
+        <aside className="hidden md:flex md:w-64 md:sticky md:top-0 md:h-screen bg-black border-r border-white/5 flex-col p-6 select-none shrink-0 text-left">
+          <div className="flex-1 overflow-y-auto space-y-8 min-h-0 pr-1">
+            {brand}
+            {navList}
+          </div>
+          <div className="shrink-0 pt-4">{userBlock}</div>
+        </aside>
+
+        <main id="admin-main" className="flex-1 min-w-0 bg-[#0b0b0b] p-4 sm:p-6 md:p-10 xl:p-12 md:h-screen md:overflow-y-auto text-left">
+          {CurrentComponent && <CurrentComponent />}
 
         {activeTab === 'projects-tab' && (
           <div className="tab-content-anim space-y-8 w-full" id="project-form-anchor">
-            <div className="flex items-center justify-between border-b border-white/5 pb-5">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/5 pb-5">
               <div>
                 <span className="text-[10px] tracking-[0.3em] text-white/30 uppercase font-semibold">Portfolio Management</span>
                 <h1 className="text-2xl font-light text-white uppercase mt-1">Danh mục & Cập nhật dự án</h1>
               </div>
-              <button onClick={clearProjectForm} className="bg-white text-black text-[10px] font-bold uppercase tracking-widest px-5 py-3 rounded-xl hover:bg-neutral-200 transition-all cursor-pointer border-none outline-none">
+              <button onClick={clearProjectForm} className="bg-white text-black text-[10px] font-bold uppercase tracking-widest px-5 min-h-11 rounded-xl hover:bg-neutral-200 transition-all cursor-pointer border-none outline-none">
                 Thêm dự án mới
               </button>
             </div>
@@ -434,8 +543,8 @@ export default function Dashboard() {
               {globalProjects && Object.keys(globalProjects).map(k => globalProjects[k]).map((proj, idx) => {
                 if (!proj) return null;
                 return (
-                  <div key={proj._id || idx} className="bg-zinc-900/20 border border-white/5 p-6 rounded-2xl flex items-center justify-between gap-4 hover:border-white/10 transition-all">
-                    <div className="flex items-center gap-4 overflow-hidden">
+                  <div key={proj._id || idx} className="bg-zinc-900/20 border border-white/5 p-6 rounded-2xl flex flex-wrap items-center justify-between gap-4 hover:border-white/10 transition-all">
+                    <div className="flex items-center gap-4 overflow-hidden min-w-0">
                       <div className="w-16 h-16 rounded-xl bg-neutral-800 overflow-hidden shrink-0 border border-white/5">
                         <img
                           src={proj.img1
@@ -451,10 +560,10 @@ export default function Dashboard() {
                       </div>
                     </div>
                     <div className="flex gap-2">
-                      <button type="button" onClick={() => fillProjectToForm(proj)} className="border border-white/10 bg-black/20 text-[10px] font-bold uppercase tracking-widest px-4 py-2 rounded-lg hover:bg-white hover:text-black transition-all cursor-pointer outline-none">
+                      <button type="button" onClick={() => fillProjectToForm(proj)} className="border border-white/10 bg-black/20 text-[10px] font-bold uppercase tracking-widest px-4 min-h-11 rounded-lg hover:bg-white hover:text-black transition-all cursor-pointer outline-none">
                         Sửa
                       </button>
-                      <button type="button" onClick={() => handleDeleteProject(proj._id, proj.name)} className="border border-red-900/40 bg-red-950/20 text-[10px] font-bold uppercase tracking-widest text-red-400 px-4 py-2 rounded-lg hover:bg-red-900 hover:text-white transition-all cursor-pointer outline-none">
+                      <button type="button" onClick={() => handleDeleteProject(proj._id, proj.name)} className="border border-red-900/40 bg-red-950/20 text-[10px] font-bold uppercase tracking-widest text-red-400 px-4 min-h-11 rounded-lg hover:bg-red-900 hover:text-white transition-all cursor-pointer outline-none">
                         Xóa
                       </button>
                     </div>
@@ -591,11 +700,11 @@ export default function Dashboard() {
                 <textarea rows="2" value={pProjectDesc} onChange={(e) => setPProjectDesc(e.target.value)} className="w-full bg-black/40 border border-white/10 rounded-xl p-4 text-xs text-white focus:outline-none" />
               </div>
 
-              <div className="flex justify-end gap-3">
-                <button type="button" onClick={clearProjectForm} className="border border-white/10 bg-black/20 text-[10px] font-bold uppercase tracking-widest px-6 py-3 rounded-xl hover:border-white transition-all cursor-pointer">
+              <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-3 [&>button]:w-full sm:[&>button]:w-auto">
+                <button type="button" onClick={clearProjectForm} className="border border-white/10 bg-black/20 text-[10px] font-bold uppercase tracking-widest px-6 min-h-11 rounded-xl hover:border-white transition-all cursor-pointer">
                   Làm trống
                 </button>
-                <button type="submit" className="bg-white text-black text-[10px] font-bold uppercase tracking-widest px-6 py-3 rounded-xl hover:bg-neutral-200 transition-all cursor-pointer">
+                <button type="submit" className="bg-white text-black text-[10px] font-bold uppercase tracking-widest px-6 min-h-11 rounded-xl hover:bg-neutral-200 transition-all cursor-pointer">
                   Lưu dữ liệu
                 </button>
               </div>
@@ -605,12 +714,12 @@ export default function Dashboard() {
 
         {activeTab === 'drafts-tab' && (
           <div className="tab-content-anim space-y-8 w-full">
-            <div className="flex items-center justify-between border-b border-white/5 pb-5">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/5 pb-5">
               <div>
                 <span className="text-[10px] tracking-[0.3em] text-white/30 uppercase font-semibold">Layout Configurations</span>
                 <h1 className="text-2xl font-light text-white uppercase mt-1">Hệ thống Draft Layout Mặt Bằng</h1>
               </div>
-              <button onClick={clearDraftForm} className="bg-white text-black text-[10px] font-bold uppercase tracking-widest px-5 py-3 rounded-xl hover:bg-neutral-200 transition-all cursor-pointer border-none outline-none">
+              <button onClick={clearDraftForm} className="bg-white text-black text-[10px] font-bold uppercase tracking-widest px-5 min-h-11 rounded-xl hover:bg-neutral-200 transition-all cursor-pointer border-none outline-none">
                 Thêm Mới Draft
               </button>
             </div>
@@ -630,10 +739,10 @@ export default function Dashboard() {
                     </div>
                   </div>
                   <div className="flex gap-2 pt-2 border-t border-white/5">
-                    <button type="button" onClick={() => fillDraftToForm(draft)} className="flex-1 border border-white/10 bg-black/20 text-[10px] font-bold uppercase py-2 rounded-lg hover:bg-white hover:text-black transition-all cursor-pointer outline-none">
+                    <button type="button" onClick={() => fillDraftToForm(draft)} className="flex-1 border border-white/10 bg-black/20 text-[10px] font-bold uppercase min-h-11 rounded-lg hover:bg-white hover:text-black transition-all cursor-pointer outline-none">
                       Sửa cấu hình
                     </button>
-                    <button type="button" onClick={() => handleDeleteDraft(draft._id, draft.name)} className="border border-red-900/40 bg-red-950/20 text-[10px] font-bold uppercase text-red-400 px-3 py-2 rounded-lg hover:bg-red-900 hover:text-white transition-all cursor-pointer outline-none">
+                    <button type="button" onClick={() => handleDeleteDraft(draft._id, draft.name)} className="border border-red-900/40 bg-red-950/20 text-[10px] font-bold uppercase text-red-400 px-3 min-h-11 rounded-lg hover:bg-red-900 hover:text-white transition-all cursor-pointer outline-none">
                       Xóa
                     </button>
                   </div>
@@ -699,11 +808,11 @@ export default function Dashboard() {
                 </div>
               </div>
 
-              <div className="flex justify-end gap-3 pt-2">
-                <button type="button" onClick={clearDraftForm} className="border border-white/10 bg-black/20 text-[10px] font-bold uppercase tracking-widest px-6 py-3 rounded-xl hover:border-white transition-all cursor-pointer">
+              <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-3 pt-2 [&>button]:w-full sm:[&>button]:w-auto">
+                <button type="button" onClick={clearDraftForm} className="border border-white/10 bg-black/20 text-[10px] font-bold uppercase tracking-widest px-6 min-h-11 rounded-xl hover:border-white transition-all cursor-pointer">
                   Làm trống form
                 </button>
-                <button type="submit" className="bg-white text-black text-[10px] font-bold uppercase tracking-widest px-6 py-3 rounded-xl hover:bg-neutral-200 transition-all cursor-pointer">
+                <button type="submit" className="bg-white text-black text-[10px] font-bold uppercase tracking-widest px-6 min-h-11 rounded-xl hover:bg-neutral-200 transition-all cursor-pointer">
                   Đồng bộ lưu cấu trúc Draft
                 </button>
               </div>
@@ -737,8 +846,8 @@ export default function Dashboard() {
                   );
                 })}
               </div>
-              <div className="flex justify-end pt-4 border-t border-white/5">
-                <button type="submit" className="bg-white text-black text-[10px] font-bold uppercase tracking-widest px-6 py-3 rounded-xl hover:bg-neutral-200 transition-all shadow-md cursor-pointer border-none outline-none">
+              <div className="flex justify-end pt-4 border-t border-white/5 [&>button]:w-full sm:[&>button]:w-auto">
+                <button type="submit" className="bg-white text-black text-[10px] font-bold uppercase tracking-widest px-6 min-h-11 rounded-xl hover:bg-neutral-200 transition-all shadow-md cursor-pointer border-none outline-none">
                   Lưu định biên bảng giá
                 </button>
               </div>
@@ -746,6 +855,9 @@ export default function Dashboard() {
           </div>
         )}
       </main>
-    </div>
+      </div>
+
+      {drawer}
+    </>
   );
 }

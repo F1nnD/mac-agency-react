@@ -16,6 +16,9 @@ const RenderSchema = new mongoose.Schema({
 
   prompt: { type: String, default: '' },
   imageUrl: { type: String, default: '' },
+  // URL gốc (Pollinations) được giữ lại khi ảnh đã được lưu bền sang kho ảnh riêng
+  imageUrlOriginal: { type: String, default: '' },
+  imageStored: { type: Boolean, default: false },
   seed: { type: Number, default: 0 },
   provider: { type: String, default: 'pollinations' },
 
@@ -26,7 +29,11 @@ const RenderSchema = new mongoose.Schema({
 
   // Dự toán sơ bộ đầy đủ (chỉ staff xem chi tiết hạng mục)
   estimate: { type: mongoose.Schema.Types.Mixed, default: {} },
-  boqId: { type: mongoose.Schema.Types.ObjectId, ref: 'BOQ', default: null }
+  boqId: { type: mongoose.Schema.Types.ObjectId, ref: 'BOQ', default: null },
+
+  // Chia sẻ công khai chỉ đọc: token ngẫu nhiên 16 byte hex; xoá token = thu hồi liên kết
+  shareToken: { type: String, unique: true, sparse: true, default: undefined },
+  sharedAt: { type: Date, default: null }
 }, { timestamps: true });
 
 module.exports = mongoose.model('Render', RenderSchema);
